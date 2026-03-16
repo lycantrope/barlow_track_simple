@@ -1,4 +1,5 @@
 import argparse
+import time
 from pathlib import Path
 from typing import Union
 
@@ -32,19 +33,34 @@ def run_epoch(
 ):
     model.train()
     epoch_loss = 0.0
-    pbar = tqdm(loader, total=len(loader), desc=f"Epoch {epoch+1}")
-    for _, x1, x2 in pbar:
-
+    pbar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
+    t0 = time.perf_counter()
+    for batch_idx, (_, x1, x2) in pbar:
+        t1 = time.perf_counter()
+        print(
+            f"DEBUG: Batch {batch_idx} retrieved from loader {t1-t0:.2f}s", flush=True
+        )
+        t0 = t1
         x1, x2 = x1.to(DEVICE), x2.to(DEVICE)
-
+        t1 = time.perf_counter()
+        print(f"DEBUG: Batch {batch_idx} moved to {DEVICE} {t1-t0:.2f}s", flush=True)
+        t0 = t1
         optimizer.zero_grad()
 
         # Forward pass
         z1 = model(x1)
         z2 = model(x2)
 
+        t1 = time.perf_counter()
+        print(f"DEBUG: Batch {batch_idx} Forward {t1-t0:.2f}s", flush=True)
+        t0 = t1
+
         # Calculate loss
         loss, _, _ = loss_fn(z1, z2)
+
+        t1 = time.perf_counter()
+        print(f"DEBUG: Batch {batch_idx} Loss {t1-t0:.2f}s", flush=True)
+        t0 = t1
 
         epoch_loss += loss.item()
         # Backward pass
