@@ -1,24 +1,22 @@
 [project]
 name = "barlow-track-simple"
 version = "0.1.0"
-description = "Add your description here"
+description = "This repository contains functions that have been extracted or refactored to isolate the dependencies used in the original barlow-track"
 readme = "README.md"
-authors = [
-    { name = "Chung-Kuan Chen", email = "b97b01045@gmail.com" }
-]
+authors = [{ name = "Chung-Kuan Chen", email = "b97b01045@gmail.com" }]
 requires-python = ">=3.12"
 dependencies = [
-    "h5py>=3.16.0",
-    "hdbscan>=0.8.41",
-    "hdf5plugin>=6.0.0",
-    "matplotlib>=3.10.8",
-    "numpy>=2.4.3",
-    "polars>=1.39.0",
-    "ruamel-yaml>=0.19.1",
-    "tifffile>=2026.3.3",
-    "torch>=2.10.0",
-    "torchio>=0.22.1",
-    "umap-learn>=0.5.11",
+    "h5py",
+    "hdbscan",
+    "hdf5plugin",
+    "matplotlib",
+    "numpy",
+    "polars",
+    "ruamel-yaml",
+    "tifffile",
+    "torch",
+    "torchio",
+    "umap-learn",
 ]
 
 [build-system]
@@ -26,8 +24,4 @@ requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "ipykernel>=7.2.0",
-    "matplotlib>=3.10.8",
-    "ruff>=0.15.6",
-]
+dev = ["ipykernel", "matplotlib", "ruff"]
