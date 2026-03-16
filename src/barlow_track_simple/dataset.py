@@ -10,6 +10,7 @@ import numpy.typing as npt
 import tifffile
 import torch
 import zarr
+import zarr.storage
 
 from barlow_track_simple.augmentation import Transform
 
@@ -233,20 +234,29 @@ class ZarrStack(Stack):
         self.zarr_path = Path(zarr_path)
         assert self.zarr_path.name.endswith((".zarr", ".zarr.zip"))
 
-        handler = zarr.open_group(self.zarr_path, mode="r")
+        self.is_zip = self.zarr_path.name.endswith(".zarr.zip")
+
+        if self.is_zip:
+            self._data = zarr.storage.ZipStore(self.zarr_path, mode="r")
+            handler = zarr.open_group(self._data)
+        else:
+            handler = zarr.open_group(self.zarr_path, mode="r")
 
         keys = (k for k in handler.keys() if str(k).startswith("t"))
         # [t0, t1, t2, t..., tn]
         keys = sorted(keys, key=lambda x: int(x[1:]))
-        assert len(keys) > 0, "No image seqeunce found in Zarr"
+        try:
+            assert len(keys) > 0, "No image seqeunce found in Zarr"
 
-        dset = handler[keys[0]]
-        assert isinstance(dset, zarr.Group), "Must be group"
-        assert (
-            channel in dset.keys()
-        ), f"No channel found in dataset: {list(dset.keys())}"
+            dset = handler[keys[0]]
+            assert isinstance(dset, zarr.Group), "Must be group"
+            assert (
+                channel in dset.keys()
+            ), f"No channel found in dataset: {list(dset.keys())}"
+        finally:
+            self.close()
 
-        self.keys = [f"{k}/{channel}" for k in handler.keys()]
+        self.keys = [f"{k}/{channel}" for k in keys]
 
         self._data = None
         self._data_sequence = []
@@ -256,12 +266,27 @@ class ZarrStack(Stack):
 
     def init(self) -> None:
         if self._data is None:
-            self._data = zarr.open_group(self.zarr_path, mode="r")
-            tmp = [self._data[k] for k in self.keys]
+            if self.is_zip:
+                self._data = zarr.storage.ZipStore(self.zarr_path, mode="r")
+                handler = zarr.open_group(self._data)
+                tmp = [handler[k] for k in self.keys]
+            else:
+                self._data = zarr.open_group(self.zarr_path)
+                tmp = [self._data[k] for k in self.keys]
+
             self._data_sequence = [x for x in tmp if isinstance(x, zarr.Array)]
 
     def close(self) -> None:
-        pass
+        if self._data is not None:
+            if isinstance(self._data, zarr.storage.ZipStore):
+                try:
+                    self._data.close()
+                except TypeError as _:
+                    # h5py\_hl\files.py", line 631, in close
+                    # Error in TypeError: bad operand type for unary ~: 'NoneType'
+                    pass
+            self._data = None
+            self._data_sequence = []
 
     @property
     def data(
@@ -372,8 +397,9 @@ class ImageDataset(torch.utils.data.Dataset):
         centroids = self.centroids[self.centroids[:, 1] == t_idx]
 
         pad_width = [(sz // 2 + sz % 2 - 1, sz // 2) for sz in self.target_sz]
-        data = np.pad(self.imagestack.data[t_idx], pad_width=pad_width)
+        data = np.asarray(self.imagestack.data[t_idx])
         data = self._normalize(data)
+        data = np.pad(data, pad_width=pad_width)
 
         wz, wy, wx = self.target_sz
         for centroid in centroids:
