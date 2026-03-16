@@ -236,18 +236,21 @@ class ZarrStack(Stack):
 
         self.is_zip = self.zarr_path.name.endswith(".zarr.zip")
 
-        if self.is_zip:
-            self._data = zarr.storage.ZipStore(self.zarr_path, mode="r")
-            handler = zarr.open_group(self._data)
-        else:
-            handler = zarr.open_group(self.zarr_path, mode="r")
+        self._data = (
+            zarr.storage.ZipStore(self.zarr_path, mode="r")
+            if self.is_zip
+            else self.zarr_path
+        )
+
+        handler = zarr.open_group(self._data, mode="r")
 
         keys = (k for k in handler.keys() if str(k).startswith("t"))
         # [t0, t1, t2, t..., tn]
         keys = sorted(keys, key=lambda x: int(x[1:]))
+        self.keys = [f"{k}/{channel}" for k in keys]
+
         try:
             assert len(keys) > 0, "No image seqeunce found in Zarr"
-
             dset = handler[keys[0]]
             assert isinstance(dset, zarr.Group), "Must be group"
             assert (
@@ -256,23 +259,18 @@ class ZarrStack(Stack):
         finally:
             self.close()
 
-        self.keys = [f"{k}/{channel}" for k in keys]
-
-        self._data = None
-        self._data_sequence = []
-
     def get_filepath(self) -> Path:
         return self.zarr_path
 
     def init(self) -> None:
         if self._data is None:
-            if self.is_zip:
-                self._data = zarr.storage.ZipStore(self.zarr_path, mode="r")
-                handler = zarr.open_group(self._data)
-                tmp = [handler[k] for k in self.keys]
-            else:
-                self._data = zarr.open_group(self.zarr_path)
-                tmp = [self._data[k] for k in self.keys]
+            self._data = (
+                zarr.storage.ZipStore(self.zarr_path, mode="r")
+                if self.is_zip
+                else self.zarr_path
+            )
+            handler = zarr.open_group(self._data, mode="r")
+            tmp = [handler[k] for k in self.keys]
 
             self._data_sequence = [x for x in tmp if isinstance(x, zarr.Array)]
 
