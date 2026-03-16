@@ -17,6 +17,21 @@ from barlow_track_simple.augmentation import Transform
 os.environ["HDF5_PLUGIN_PATH"] = hdf5plugin.PLUGINS_PATH
 
 
+def estimate_range(data, p_min: float = 5.0, p_max: float = 100.0):
+    # Estimate the pixel value range
+    frame_idx = np.arange(len(data))
+    #  10% of frame will be selected (max: 8 , min: 1)
+    n_selected = max(min(frame_idx.size // 10, 8), 1)
+    selected_idx = np.random.choice(frame_idx, n_selected, replace=False)
+    # Calculate the percentile values
+    p_low, p_high = np.percentile(
+        [data[i] for i in selected_idx],
+        [p_min, p_max],
+    )
+    ptp = p_high - p_low + 1e-8
+    return p_low, p_high, ptp
+
+
 class Stack(abc.ABC):
     @abc.abstractmethod
     def get_filepath(self) -> Path: ...
@@ -46,32 +61,6 @@ class Stack(abc.ABC):
     def __len__(self) -> int:
         return self.shape[0]
 
-    def get_normalizer(self, p_min: float = 5.0, p_max: float = 100.0):
-        if self.data is None:
-            self.init()
-
-        assert self.data is not None, "data must be accessed after init."
-        # Estimate the pixel value range
-        frame_idx = np.arange(self.shape[0])
-        #  10% of frame will be selected (max: 8 , min: 1)
-        n_selected = max(min(frame_idx.size // 10, 8), 1)
-        selected_idx = np.random.choice(frame_idx, n_selected, replace=False)
-        # Calculate the percentile values
-        p_low, p_high = np.percentile(
-            [self.data[i] for i in selected_idx],
-            [p_min, p_max],
-        )
-        ptp = p_high - p_low + 1e-8
-
-        def _normalizer(img: np.ndarray) -> np.ndarray:
-            # Clip the values
-            img = np.clip(img.astype("f4"), p_low, p_high)
-            # Scale to [0, 1] range
-            img = (img - p_low) / ptp
-            return img
-
-        return _normalizer
-
     def __getstate__(self):
         # This garantee everything can be pickled.
         if self.data is not None:
@@ -92,6 +81,7 @@ class TiffStack(Stack):
     def __init__(self, tif_path: os.PathLike):
         self.tif_path = Path(tif_path)
         assert self.tif_path.suffix.lower().endswith((".tif", ".tiff"))
+
         self._data = None
 
     def get_filepath(self) -> Path:
@@ -127,7 +117,7 @@ class HDFStack(Stack):
         assert self.hdfpath.suffix.lower() == ".h5"
 
         self.dataset_key = dataset_key
-        with h5py.File(self.hdfpath, mode="r") as handler:
+        with h5py.File(self.hdfpath, mode="r", libver="latest", swmr=True) as handler:
             if self.dataset_key not in handler.keys():
                 raise KeyError(f"Cannot found key: {self.dataset_key}")
 
@@ -138,7 +128,7 @@ class HDFStack(Stack):
 
     def init(self) -> None:
         if self._data is None:
-            self._data = h5py.File(self.hdfpath, mode="r")
+            self._data = h5py.File(self.hdfpath, mode="r", libver="latest", swmr=True)
 
     def close(self) -> None:
         if self._data is not None:
@@ -174,7 +164,7 @@ class HDFSequence(Stack):
         # This is for one dataset contains (T,Z,Y,X)
         self.hdfpath = Path(hdfpath)
         assert self.hdfpath.suffix.lower() == ".h5"
-        with h5py.File(self.hdfpath, mode="r") as handler:
+        with h5py.File(self.hdfpath, mode="r", libver="latest", swmr=True) as handler:
             # sorting the t0, ..., tn
             keys = (k for k in handler.keys() if str(k).startswith("t"))
             # [t0, t1, t2, t..., tn]
@@ -196,7 +186,7 @@ class HDFSequence(Stack):
 
     def init(self) -> None:
         if self._data is None:
-            self._data = h5py.File(self.hdfpath, mode="r")
+            self._data = h5py.File(self.hdfpath, mode="r", libver="latest", swmr=True)
             tmp_seq = [self._data[k] for k in self.keys]
             self._data_sequence = [
                 dset for dset in tmp_seq if isinstance(dset, h5py.Dataset)
@@ -340,11 +330,17 @@ class ImageDataset(torch.utils.data.Dataset):
 
         self.n_obj = self.centroids.shape[0]
         self.t_indice = sorted(np.unique(self.centroids[1]))
-        self._normalize = self.imagestack.get_normalizer()
 
         # Since Dataloader will pickle the status to other thread, however, the memmap or hdf file is not picklable
         # We _normalizerose the files just after init, then, reopen it in sub workers.
+        self.min, self.max, self.ptp = estimate_range(self.imagestack.data)
         self.imagestack.close()
+
+    def normalize(self, img: np.ndarray) -> np.ndarray:
+        img = np.clip(img.astype("f4"), self.min, self.max)
+        img = (img - self.min) / self.ptp
+
+        return img
 
     def __getitem__(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
         assert self.imagestack.data is not None, "Must be init before access"
@@ -381,7 +377,7 @@ class ImageDataset(torch.utils.data.Dataset):
 
         # Sanity test: np.testing.assert_equal(patch.shape, self.target_sz)
         patch = patch[None, ...]
-        return centroid, self._normalize(patch)
+        return centroid, self.normalize(patch)
 
     def __len__(self):
         return self.n_obj
@@ -396,7 +392,7 @@ class ImageDataset(torch.utils.data.Dataset):
 
         pad_width = [(sz // 2 + sz % 2 - 1, sz // 2) for sz in self.target_sz]
         data = np.asarray(self.imagestack.data[t_idx])
-        data = self._normalize(data)
+        data = self.normalize(data)
         data = np.pad(data, pad_width=pad_width)
 
         wz, wy, wx = self.target_sz
