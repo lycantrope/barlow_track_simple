@@ -12,7 +12,7 @@ from barlow_track_simple.model import (
     BarlowTwinsDualLoss,
     BarlowTwinsEmbed3D,
 )
-from barlow_track_simple.plotting import plot_loss
+from barlow_track_simple.plot import plot_loss
 
 yaml = YAML()
 
