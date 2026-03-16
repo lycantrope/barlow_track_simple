@@ -9,8 +9,9 @@ import numpy as np
 import numpy.typing as npt
 import tifffile
 import torch
+import zarr
 
-from .augmentation import Transform
+from barlow_track_simple.augmentation import Transform
 
 os.environ["HDF5_PLUGIN_PATH"] = hdf5plugin.PLUGINS_PATH
 
@@ -28,7 +29,14 @@ class Stack(abc.ABC):
     @abc.abstractmethod
     def data(
         self,
-    ) -> Union[np.memmap, np.ndarray, h5py.Dataset, Sequence[h5py.Dataset], None]: ...
+    ) -> Union[
+        np.memmap,
+        np.ndarray,
+        h5py.Dataset,
+        Sequence[h5py.Dataset],
+        Sequence[zarr.Array],
+        None,
+    ]: ...
 
     @property
     @abc.abstractmethod
@@ -208,6 +216,57 @@ class HDFSequence(Stack):
     def data(
         self,
     ) -> Optional[Sequence[h5py.Dataset]]:
+        self.init()
+        return self._data_sequence
+
+    @property
+    def shape(self) -> Sequence[int]:
+        self.init()
+        assert self._data is not None
+        T = len(self._data_sequence)
+        return (T, *self._data_sequence[0].shape)
+
+
+class ZarrStack(Stack):
+    def __init__(self, zarr_path: os.PathLike, channel="c0"):
+        # This is for one dataset contains (T,Z,Y,X)
+        self.zarr_path = Path(zarr_path)
+        assert self.zarr_path.name.endswith((".zarr", ".zarr.zip"))
+
+        handler = zarr.open_group(self.zarr_path, mode="r")
+
+        keys = (k for k in handler.keys() if str(k).startswith("t"))
+        # [t0, t1, t2, t..., tn]
+        keys = sorted(keys, key=lambda x: int(x[1:]))
+        assert len(keys) > 0, "No image seqeunce found in Zarr"
+
+        dset = handler[keys[0]]
+        assert isinstance(dset, zarr.Group), "Must be group"
+        assert (
+            channel in dset.keys()
+        ), f"No channel found in dataset: {list(dset.keys())}"
+
+        self.keys = [f"{k}/{channel}" for k in handler.keys()]
+
+        self._data = None
+        self._data_sequence = []
+
+    def get_filepath(self) -> Path:
+        return self.zarr_path
+
+    def init(self) -> None:
+        if self._data is None:
+            self._data = zarr.open_group(self.zarr_path, mode="r")
+            tmp = [self._data[k] for k in self.keys]
+            self._data_sequence = [x for x in tmp if isinstance(x, zarr.Array)]
+
+    def close(self) -> None:
+        pass
+
+    @property
+    def data(
+        self,
+    ) -> Optional[Sequence[zarr.Array]]:
         self.init()
         return self._data_sequence
 
@@ -400,32 +459,3 @@ class NeuronAugmentedImagePairDataset(torch.utils.data.Dataset):
                 for (stack, csv_path) in data_list
             ]
         )
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    from torch.utils.data import DataLoader
-
-    home = Path(r"D:\kuan\zeng-nwb\TOY21\251203-1DA\activity\W4")
-    tif_path = home / "crop-W4-activity.h5"
-    centroid_path = home / "crop-W4-activity_peaks.csv"
-
-    dataset = NeuronAugmentedImagePairDataset(
-        HDFSequence(tif_path, channel="c1"), centroid_path
-    )
-    loader = DataLoader(dataset, batch_size=64)
-    # import matplotlib.pyplot as plt
-
-    data = None
-    for k, data in enumerate(loader):
-        if k > 2:
-            break
-    if data is not None:
-        d = data[0][0, 0].numpy()
-        d1 = data[1][0, 0].numpy()
-        fig = plt.figure()
-        ax = fig.add_subplot(121)
-        ax.imshow(d.max(axis=0))
-        ax = fig.add_subplot(122)
-        ax.imshow(d1.max(axis=0))
-        plt.show()

@@ -74,7 +74,7 @@ def run_embedding():
     datapaths = [
         f
         for f in Path(args.data_folder).glob("*.*")
-        if f.suffix.endswith((".tif", ".h5"))
+        if f.name.endswith((".zarr", ".zarr.zip", ".tif", ".h5"))
     ]
     csvpaths = [f for f in Path(args.data_folder).glob("*.csv")]
 

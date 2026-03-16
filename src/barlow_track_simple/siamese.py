@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .unet import (
+from barlow_track_simple.unet import (
     ResNetBlockSE,
     create_encoders,
     number_of_features_per_level,

@@ -3,18 +3,19 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from torch.utils.data import DataLoader, random_split
 
-from .dataset import (
+from barlow_track_simple.dataset import (
     HDFSequence,
     HDFStack,
     NeuronAugmentedImagePairDataset,
     Stack,
     TiffStack,
+    ZarrStack,
 )
 
 
 def verify_input_data(
-    datapaths,
-    csvpaths,
+    datapaths: Sequence[Path],
+    csvpaths: Sequence[Path],
     channel: str = "",
     hdf_key: str = "",
 ) -> List[Tuple[Stack, Path]]:
@@ -36,8 +37,10 @@ def verify_input_data(
             stack_iter = (HDFStack(p, hdf_key) for p in datapaths)
         else:
             raise ValueError("No channel or hdf_key provided.")
+    elif datapaths[0].name.endswith((".zarr", ".zarr.zip")) and channel:
+        stack_iter = (ZarrStack(p, channel=channel) for p in datapaths)
     else:
-        raise TypeError(f"Only support TIFF, HDF5: {suffix}")
+        raise TypeError(f"Only support TIFF, HDF5 and Zarr: {suffix}")
 
     return list(zip(stack_iter, csvpaths))
 

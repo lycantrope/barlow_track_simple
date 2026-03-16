@@ -1,13 +1,12 @@
 import os
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Sequence, Tuple
+from typing import Literal, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from ruamel.yaml import YAML
 
-from .siamese import (
+from barlow_track_simple.siamese import (
     Encoder,
     ResidualEncoder3D,
     Siamese,
