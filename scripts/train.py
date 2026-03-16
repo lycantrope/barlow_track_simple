@@ -1,11 +1,13 @@
 import argparse
 from pathlib import Path
-from typing import Dict
+from typing import Union
 
 import matplotlib.pyplot as plt
 import torch
 from ruamel.yaml import YAML
+from tqdm.auto import tqdm
 
+from barlow_track_simple.config import get_device
 from barlow_track_simple.dataloader import get_train_loader, verify_input_data
 from barlow_track_simple.model import (
     LARS,
@@ -16,21 +18,22 @@ from barlow_track_simple.plot import plot_loss
 
 yaml = YAML()
 
-DEVICE = torch.accelerator.current_accelerator() or "cpu"
+DEVICE = get_device()
 
 print(f"Use device: {DEVICE}")
 
 
 def run_epoch(
-    model: BarlowTwinsEmbed3D,
+    epoch: int,
+    loader: torch.utils.data.DataLoader,
+    model: Union[BarlowTwinsEmbed3D, torch.nn.DataParallel],
     loss_fn: BarlowTwinsDualLoss,
     optimizer: LARS,
-    loaders: Dict[str, torch.utils.data.DataLoader],
-    epoch: int,
 ):
     model.train()
     epoch_loss = 0.0
-    for _, x1, x2 in loaders["train"]:
+    pbar = tqdm(loader, total=len(loader), desc=f"Epoch {epoch+1}")
+    for _, x1, x2 in pbar:
 
         x1, x2 = x1.to(DEVICE), x2.to(DEVICE)
 
@@ -51,12 +54,12 @@ def run_epoch(
         # Check the mean of the standard deviations
         epoch_variances = torch.std(z1, dim=0)
         batch_std = epoch_variances.mean().item()
-
+        pbar.set_postfix({"loss": f"{loss.item():.4f}", "std": f"{batch_std:.4f}"})
         if batch_std < 1e-6:
             print(f"Epoch {epoch} mean feature variance: {batch_std:.6f}")
-            raise RuntimeError(f"Collapse detected at batch! Std: {batch_std}")
+            raise RuntimeError(f"Collapse detected at batch! Std: {batch_std:.6f}")
 
-    avg_loss = epoch_loss / len(loaders["train"])
+    avg_loss = epoch_loss / len(loader)
     return avg_loss
 
 
@@ -104,6 +107,12 @@ def main():
 
     model.to(DEVICE)
 
+    # 2. Wrap the model
+    if torch.cuda.device_count() > 1:
+        print(f"Use {torch.cuda.device_count()} GPUs!")
+        # This automatically splits the batch and replicates the model
+        model = torch.nn.DataParallel(model)
+
     loss_fn = BarlowTwinsDualLoss(
         lambd=cfg["lambd"],
         lambd_obj=cfg["lambd_obj"],
@@ -129,7 +138,7 @@ def main():
     print("Start training")
     for epoch in range(cfg["epochs"]):
         try:
-            avg_val_loss = run_epoch(model, loss_fn, optimizer, loaders, epoch)
+            avg_val_loss = run_epoch(epoch, loaders["train"], model, loss_fn, optimizer)
         except RuntimeError:
             break
 

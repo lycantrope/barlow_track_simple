@@ -64,6 +64,15 @@ def get_train_loader(
     )
 
     return {
-        "train": DataLoader(train_dset, batch_size=batch_size),
-        "valid": DataLoader(val_dset, batch_size=batch_size),
+        "train": DataLoader(
+            train_dset,
+            batch_size=batch_size,
+            shuffle=True,
+            pin_memory=True,
+        ),
+        "valid": DataLoader(
+            val_dset,
+            batch_size=batch_size,
+            pin_memory=True,
+        ),
     }

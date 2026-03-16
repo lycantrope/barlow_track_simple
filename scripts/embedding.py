@@ -8,13 +8,14 @@ import torch
 from ruamel.yaml import YAML
 from tqdm.auto import tqdm
 
+from barlow_track_simple.config import get_device
 from barlow_track_simple.dataloader import verify_input_data
 from barlow_track_simple.dataset import ImageDataset
 from barlow_track_simple.model import BarlowTwinsEmbed3D
 
 os.environ["HDF5_PLUGIN_PATH"] = hdf5plugin.PLUGINS_PATH
 
-DEVICE = torch.accelerator.current_accelerator() or "cpu"
+DEVICE = get_device()
 
 print(f"Use device: {DEVICE}")
 

@@ -44,6 +44,7 @@ dependencies = [
     { name = "tifffile" },
     { name = "torch" },
     { name = "torchio" },
+    { name = "tqdm" },
     { name = "umap-learn" },
 ]
 
@@ -66,6 +67,7 @@ requires-dist = [
     { name = "tifffile" },
     { name = "torch" },
     { name = "torchio" },
+    { name = "tqdm" },
     { name = "umap-learn" },
 ]
 
