@@ -1,0 +1,77 @@
+# Parameters for training a BarlowTrack model
+
+# CHANGEME: these parameters are specific for each model and dataset
+project_path: 
+
+# Optional (but recommended) path to a pretrained model; note that the architecture parameters must be the same for this to work
+# If you want to train from scratch, set this to null
+pretrained_model_path:  # Directly pass the .pth file of the pretrained model (the model weights)
+
+
+####
+# Hyperparameters for training the model
+####
+
+# Architecture
+projector: '2048-2048'  # Original paper argued that larger final size is better
+projector_final: 512
+embedding_dim: 64  # Projector also gets an additional first layer of size 'embedding_dim'
+
+
+backbone_type: "ResidualEncoder3D"
+
+# This parameters was not used
+backbone_kwargs:
+  num_levels: 2
+  f_maps: 4  # Default in paper is 64... is this super small?
+
+# Size of image crop (around each neuron) to use
+target_sz_z: 8
+target_sz_xy: 64
+
+# Augmentation hyperparameters
+p_RandomAffine_both: # If set, overrides the two below
+
+# First path through the Siamese network
+p_RandomAffine_base: 1.0
+p_RandomBlur_base: 0.1
+
+# Second path; default is more augmentation
+p_RandomAffine_flip: 1.0  # A 180 degree rotation, like a flip
+p_RandomBlur: 0.0
+p_RandomAffine: 1.0  # At least one deformation should have probability 1, so that the two images are definitely different
+p_RandomElasticDeformation: 1.0
+zxy_RandomElasticDeformation: [1, 3, 3]
+p_RandomNoise: 0.1
+std_RandomNoise: 0.25
+
+# Optimization hyperparameters
+lambd: 0.0051
+batch_size: 256  # Number of Centroids used per batch (batch_size, target_sz_z, target_sz_xy, target_sz_xy)
+weight_decay: 1e-6
+epochs: 50
+lr: 0.0001
+
+# No used 
+momentum: 0.9
+eta: 0.001
+weight_decay_filter: false
+lars_adaptation_filter: false
+
+# Fraction data for validation
+val_fraction: 0.1
+
+# Hyperparameters for the new (transposed) BarlowTrack loss
+lambd_obj: 0.67  # Set to 1 to only use the transposed loss; 0 means only original BarlowTwins loss
+
+# Debugging and logging parameters
+print_freq: 100
+rank: 0
+dryrun: false
+DEBUG: false
+
+
+# This optional is for reading the hdf file like Ascent format t0/c0, t0/c1, t1/c0, ..., tn/c0, tn/c1
+channel: "c1"
+# or One hdf dataset with axes of (T,Z,Y,X)
+hdf_key: 

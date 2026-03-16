@@ -1,0 +1,33 @@
+[project]
+name = "barlow-track-simple"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Chung-Kuan Chen", email = "b97b01045@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "h5py>=3.16.0",
+    "hdbscan>=0.8.41",
+    "hdf5plugin>=6.0.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.3",
+    "polars>=1.39.0",
+    "ruamel-yaml>=0.19.1",
+    "tifffile>=2026.3.3",
+    "torch>=2.10.0",
+    "torchio>=0.22.1",
+    "umap-learn>=0.5.11",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+    "matplotlib>=3.10.8",
+    "ruff>=0.15.6",
+]
