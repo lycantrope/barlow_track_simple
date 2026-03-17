@@ -52,8 +52,10 @@ def run_epoch(
         valid_t_indice = t_indice_flat[mask]
         unique_times = valid_t_indice.unique()
 
-        x1_filtered = x1[mask, :].unsequeeze(1)
-        x2_filtered = x2[mask, :].unsequeeze(1)
+        x1_filtered = x1[mask]  # type: torch.Tensor
+        x2_filtered = x2[mask]  # type: torch.Tensor
+        x1_filtered = x1_filtered.unsqueeze(1)
+        x2_filtered = x2_filtered.unsqueeze(1)
 
         total_loss = torch.tensor(0.0, device=DEVICE)
         valid_loss_count = 0
