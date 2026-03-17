@@ -381,7 +381,7 @@ class ImageDataset(torch.utils.data.Dataset):
 
         self.n_obj = self.centroids.shape[0]
         self.t_indice = sorted(np.unique(self.centroids[1]))
-        self.n_obj_max = np.bincount(self.centroids[1]).max()
+        self.n_obj_max = np.bincount(self.centroids[:, 1]).max()
         # Since Dataloader will pickle the status to other thread, however, the memmap or hdf file is not picklable
         # We _normalizerose the files just after init, then, reopen it in sub workers.
         self.min, self.max, self.ptp = estimate_range(
@@ -517,9 +517,9 @@ class NeuronAugmentedImagePairDataset(torch.utils.data.Dataset):
     def __getitem__(
         self, t_idx: int
     ) -> Tuple[np.ndarray, npt.ArrayLike, npt.ArrayLike]:
-        n_obj = self.base_dataset.n_obj_max
-        centroids = np.full((n_obj, 6), fill_value=-1)
-        y_all = np.zeros((n_obj, *self.base_dataset.target_sz))
+        n_obj_max = self.base_dataset.n_obj_max
+        centroids = np.full((n_obj_max, 6), fill_value=-1)
+        y_all = np.zeros((n_obj_max, *self.base_dataset.target_sz))
         for i, (centroid, y) in enumerate(self.base_dataset.iter_patches_at(t_idx)):
             centroids[i] = centroid
             y_all[i] = y
