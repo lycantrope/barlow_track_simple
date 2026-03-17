@@ -53,15 +53,13 @@ def run_epoch(
 
         x1_filtered = x1[mask]  # type: torch.Tensor
         x2_filtered = x2[mask]  # type: torch.Tensor
-        x1_filtered = x1_filtered.unsqueeze(1)
-        x2_filtered = x2_filtered.unsqueeze(1)
-
-        total_loss = torch.tensor(0.0, device=DEVICE)
-        valid_loss_count = 0
 
         # Forward pass
         z1 = model(x1_filtered)
         z2 = model(x2_filtered)
+
+        total_loss = torch.tensor(0.0, device=DEVICE)
+        valid_loss_count = 0
 
         for t in unique_times:
             # Filter features belonging only to time 't'
