@@ -47,7 +47,7 @@ std_RandomNoise: 0.25
 
 # Optimization hyperparameters
 lambd: 0.0051
-batch_size: 256  # Number of Centroids used per batch (batch_size, target_sz_z, target_sz_xy, target_sz_xy)
+batch_size: 2  # Number of Centroids used per time (batch_size, n_obj_max, target_sz_z, target_sz_xy, target_sz_xy)
 weight_decay: 1e-6
 epochs: 50
 lr: 0.0001
@@ -72,6 +72,6 @@ DEBUG: false
 
 
 # This optional is for reading the hdf file like Ascent format t0/c0, t0/c1, t1/c0, ..., tn/c0, tn/c1
-channel: "c1"
+channel: ""
 # or One hdf dataset with axes of (T,Z,Y,X)
-hdf_key: 
+hdf_key: ""
