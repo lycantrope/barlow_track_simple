@@ -517,10 +517,9 @@ class NeuronAugmentedImagePairDataset(torch.utils.data.Dataset):
     def __getitem__(
         self, t_idx: int
     ) -> Tuple[np.ndarray, npt.ArrayLike, npt.ArrayLike]:
-        _, Z, Y, X = self.base_dataset.imagestack.shape
         n_obj = self.base_dataset.n_obj_max
         centroids = np.full((n_obj, 6), fill_value=-1)
-        y_all = np.zeros((n_obj, Z, Y, X))
+        y_all = np.zeros((n_obj, *self.base_dataset.target_sz))
         for i, (centroid, y) in enumerate(self.base_dataset.iter_patches_at(t_idx)):
             centroids[i] = centroid
             y_all[i] = y
