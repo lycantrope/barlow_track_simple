@@ -419,6 +419,7 @@ class ImageDataset(torch.utils.data.Dataset):
         x0_c, x1_c = np.clip((x0, x1), 0, vol_x)
 
         patch = self.imagestack.data[t][z0_c:z1_c, y0_c:y1_c, x0_c:x1_c]
+        patch = np.asarray(patch)
         # 6. Apply padding if the patch was at the edge
         if any(sum(p) > 0 for p in [pad_z, pad_y, pad_x]):
             patch = np.pad(

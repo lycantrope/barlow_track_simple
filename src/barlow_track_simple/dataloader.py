@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+import torch
 from torch.utils.data import DataLoader, random_split
 
 from barlow_track_simple.dataset import (
@@ -76,10 +77,14 @@ def get_train_loader(
             batch_size=batch_size,
             shuffle=True,
             pin_memory=True,
+            persistent_workers=True,
+            num_workers=min(torch.get_num_threads(), 8),
         ),
         "valid": DataLoader(
             val_dset,
             batch_size=batch_size,
             pin_memory=True,
+            persistent_workers=True,
+            num_workers=min(torch.get_num_threads(), 8),
         ),
     }
