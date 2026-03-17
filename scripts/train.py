@@ -34,15 +34,15 @@ def run_epoch(
     epoch_loss = 0.0
     valid_batch_count = 0
     pbar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
-    for batch_idx, (meta, x1, x2) in pbar:
+    for batch_idx, (meta, y1, y2) in pbar:
         optimizer.zero_grad()
-        meta, x1, x2 = meta.to(DEVICE), x1.to(DEVICE), x2.to(DEVICE)
+        meta, y1, y2 = meta.to(DEVICE), y1.to(DEVICE), y2.to(DEVICE)
 
         # [Batch, n_obj_max, Z, Y, X]
-        Z, Y, X = x1.shape[-3:]
+        Z, Y, X = y1.shape[-3:]
         # [Batch, n_obj_max, Z, Y, X] => [batch*n_obj_max, 1, Z, Y, X]
-        x1 = x1.view(-1, 1, Z, Y, X)
-        x2 = x2.view(-1, 1, Z, Y, X)
+        y1 = y1.view(-1, 1, Z, Y, X)
+        y2 = y2.view(-1, 1, Z, Y, X)
         # [Batch, n_obj_max, 6] => [Batch * n_obj_max, 6]
         t_indice_flat = meta[:, :, 1].view(-1)
 
@@ -51,12 +51,12 @@ def run_epoch(
         valid_t_indice = t_indice_flat[mask]
         unique_times = valid_t_indice.unique()
 
-        x1_filtered = x1[mask]  # type: torch.Tensor
-        x2_filtered = x2[mask]  # type: torch.Tensor
+        y1_filtered = y1[mask]  # type: torch.Tensor
+        y2_filtered = y2[mask]  # type: torch.Tensor
 
         # Forward pass
-        z1 = model(x1_filtered)
-        z2 = model(x2_filtered)
+        z1 = model(y1_filtered)
+        z2 = model(y2_filtered)
 
         total_loss = torch.tensor(0.0, device=DEVICE)
         valid_loss_count = 0
@@ -151,7 +151,7 @@ def main():
         lambd_obj=cfg["lambd_obj"],
     )
 
-    optimizer = LARS(
+    optimizer = torch.optim.Adam(
         params=model.parameters(),
         lr=cfg["lr"],
         weight_decay=cfg["weight_decay"],
@@ -187,11 +187,23 @@ def main():
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for _, x1, x2 in loaders["valid"]:
-                x1, x2 = x1.to(DEVICE), x2.to(DEVICE)
+            for meta, y1, y2 in loaders["valid"]:
+                meta, y1, y2 = meta.to(DEVICE), y1.to(DEVICE), y2.to(DEVICE)
+                # [Batch, n_obj_max, Z, Y, X]
+                Z, Y, X = y1.shape[-3:]
+                # [Batch, n_obj_max, Z, Y, X] => [batch*n_obj_max, 1, Z, Y, X]
+                y1 = y1.view(-1, 1, Z, Y, X)
+                y2 = y2.view(-1, 1, Z, Y, X)
+                # [Batch, n_obj_max, 6] => [Batch * n_obj_max, 6]
+                t_indice_flat = meta[:, :, 1].view(-1)
 
-                z1 = model(x1)
-                z2 = model(x2)
+                mask = t_indice_flat >= 0
+
+                y1_filtered = y1[mask]  # type: torch.Tensor
+                y2_filtered = y2[mask]  # type: torch.Tensor
+
+                z1 = model(y1_filtered)
+                z2 = model(y2_filtered)
                 loss, _, _ = loss_fn(z1, z2)
                 val_loss += loss.item()
                 print(f"Epoch {epoch}: Val Loss: {val_loss/len(loaders['valid'])}")

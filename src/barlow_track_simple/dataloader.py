@@ -82,7 +82,7 @@ def get_train_loader(
         ),
         "valid": DataLoader(
             val_dset,
-            batch_size=batch_size,
+            batch_size=1,
             pin_memory=True,
             persistent_workers=True,
             num_workers=min(torch.get_num_threads(), 8),
