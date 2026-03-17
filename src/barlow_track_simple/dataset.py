@@ -17,9 +17,9 @@ from barlow_track_simple.augmentation import Transform
 os.environ["HDF5_PLUGIN_PATH"] = hdf5plugin.PLUGINS_PATH
 
 
-def estimate_range(data, p_min: float = 5.0, p_max: float = 100.0):
+def estimate_range(N, data, p_min: float = 5.0, p_max: float = 100.0):
     # Estimate the pixel value range
-    frame_idx = np.arange(len(data))
+    frame_idx = np.arange(N)
     #  10% of frame will be selected (max: 8 , min: 1)
     n_selected = max(min(frame_idx.size // 10, 8), 1)
     selected_idx = np.random.choice(frame_idx, n_selected, replace=False)
@@ -51,6 +51,7 @@ class Stack(abc.ABC):
         h5py.Dataset,
         Sequence[h5py.Dataset],
         Sequence[zarr.Array],
+        zarr.Array,
         None,
     ]: ...
 
@@ -218,7 +219,7 @@ class HDFSequence(Stack):
         return (T, *self._data_sequence[0].shape)
 
 
-class ZarrStack(Stack):
+class ZarrSequence(Stack):
     def __init__(self, zarr_path: os.PathLike, channel="c0"):
         # This is for one dataset contains (T,Z,Y,X)
         self.zarr_path = Path(zarr_path)
@@ -227,7 +228,7 @@ class ZarrStack(Stack):
         self.is_zip = self.zarr_path.name.endswith(".zarr.zip")
 
         self._data = (
-            zarr.storage.ZipStore(self.zarr_path, mode="r")
+            zarr.storage.ZipStore(self.zarr_path, mode="r", read_only=True)
             if self.is_zip
             else self.zarr_path
         )
@@ -255,7 +256,7 @@ class ZarrStack(Stack):
     def init(self) -> None:
         if self._data is None:
             self._data = (
-                zarr.storage.ZipStore(self.zarr_path, mode="r")
+                zarr.storage.ZipStore(self.zarr_path, mode="r", read_only=True)
                 if self.is_zip
                 else self.zarr_path
             )
@@ -289,6 +290,56 @@ class ZarrStack(Stack):
         assert self._data is not None
         T = len(self._data_sequence)
         return (T, *self._data_sequence[0].shape)
+
+
+class ZarrStack(Stack):
+    def __init__(self, zarr_path: os.PathLike):
+        # This is for one dataset contains (T,Z,Y,X)
+        self.zarr_path = Path(zarr_path)
+        assert self.zarr_path.name.endswith((".zarr", ".zarr.zip"))
+        self.is_zip = self.zarr_path.name.endswith(".zarr.zip")
+        self.store = (
+            zarr.storage.ZipStore(self.zarr_path, mode="r", read_only=True)
+            if self.is_zip
+            else self.zarr_path
+        )
+        self._data = zarr.open_array(self.store, mode="r")
+        assert isinstance(self._data, zarr.Array)
+
+        self._shape = self._data.shape
+        self.close()
+
+    def get_filepath(self) -> Path:
+        return self.zarr_path
+
+    def init(self) -> None:
+        if self._data is None:
+            self.store = (
+                zarr.storage.ZipStore(self.zarr_path, mode="r", read_only=True)
+                if self.is_zip
+                else self.zarr_path
+            )
+            self._data = zarr.open_array(self.store, mode="r")
+
+    def close(self) -> None:
+        if self._data is not None:
+            if self.is_zip and isinstance(self.store, zarr.storage.ZipStore):
+                self.store.close()
+            self._data = None
+
+    @property
+    def data(
+        self,
+    ) -> Optional[zarr.Array]:
+        self.init()
+        assert self._data is not None, ""
+        return self._data
+
+    @property
+    def shape(self) -> Sequence[int]:
+        self.init()
+        assert self._data is not None, ""
+        return self._data.shape
 
 
 class ImageDataset(torch.utils.data.Dataset):
@@ -333,7 +384,9 @@ class ImageDataset(torch.utils.data.Dataset):
 
         # Since Dataloader will pickle the status to other thread, however, the memmap or hdf file is not picklable
         # We _normalizerose the files just after init, then, reopen it in sub workers.
-        self.min, self.max, self.ptp = estimate_range(self.imagestack.data)
+        self.min, self.max, self.ptp = estimate_range(
+            self.imagestack.shape[0], self.imagestack.data
+        )
         self.imagestack.close()
 
     def normalize(self, img: np.ndarray) -> np.ndarray:

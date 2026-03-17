@@ -9,6 +9,7 @@ from barlow_track_simple.dataset import (
     NeuronAugmentedImagePairDataset,
     Stack,
     TiffStack,
+    ZarrSequence,
     ZarrStack,
 )
 
@@ -37,8 +38,11 @@ def verify_input_data(
             stack_iter = (HDFStack(p, hdf_key) for p in datapaths)
         else:
             raise ValueError("No channel or hdf_key provided.")
-    elif datapaths[0].name.endswith((".zarr", ".zarr.zip")) and channel:
-        stack_iter = (ZarrStack(p, channel=channel) for p in datapaths)
+    elif datapaths[0].name.endswith((".zarr", ".zarr.zip")):
+        if channel:
+            stack_iter = (ZarrSequence(p, channel=channel) for p in datapaths)
+        else:
+            stack_iter = (ZarrStack(p) for p in datapaths)
     else:
         raise TypeError(f"Only support TIFF, HDF5 and Zarr: {suffix}")
 
