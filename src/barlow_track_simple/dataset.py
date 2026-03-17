@@ -380,8 +380,9 @@ class ImageDataset(torch.utils.data.Dataset):
         ), f"All centroid should smaller than 4D images, {boundary} {centroids_max}"
 
         self.n_obj = self.centroids.shape[0]
-        self.t_indice = sorted(np.unique(self.centroids[1]))
-        self.n_obj_max = np.bincount(self.centroids[:, 1]).max()
+        t_indice_all = self.centroids[:, 1]
+        self.t_indice = sorted(np.unique(t_indice_all))
+        self.n_obj_max = np.bincount(t_indice_all).max()
         # Since Dataloader will pickle the status to other thread, however, the memmap or hdf file is not picklable
         # We _normalizerose the files just after init, then, reopen it in sub workers.
         self.min, self.max, self.ptp = estimate_range(
