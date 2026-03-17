@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
 mpl.rcParams["svg.fonttype"] = "none"
-mpl.rcParams["font.family"] = "Verdana"
+# mpl.rcParams["font.family"] = "Verdana"
 
 
 def plot_loss(

@@ -1,5 +1,4 @@
 import argparse
-import time
 from pathlib import Path
 from typing import Union
 
@@ -173,10 +172,7 @@ def main():
     # Training
     print("Start training")
     for epoch in range(cfg["epochs"]):
-        try:
-            avg_val_loss = run_epoch(epoch, loaders["train"], model, loss_fn, optimizer)
-        except RuntimeError:
-            break
+        avg_val_loss = run_epoch(epoch, loaders["train"], model, loss_fn, optimizer)
 
         # 3. Save Intermediate Checkpoint
         torch.save(
