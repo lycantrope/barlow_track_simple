@@ -14,7 +14,7 @@ from barlow_track_simple.model import (
     BarlowTwinsDualLoss,
     BarlowTwinsEmbed3D,
 )
-from barlow_track_simple.plot import plot_loss
+from barlow_track_simple.plot import plot_loss, plot_matrices
 
 yaml = YAML()
 
@@ -28,14 +28,14 @@ def run_epoch(
     loader: torch.utils.data.DataLoader,
     model: Union[BarlowTwinsEmbed3D, torch.nn.DataParallel],
     loss_fn: BarlowTwinsDualLoss,
-    optimizer: LARS,
+    optimizer: torch.optim.Optimizer,
 ):
     model.train()
     epoch_loss = 0.0
     valid_batch_count = 0
     pbar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
     for batch_idx, (meta, y1, y2) in pbar:
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         meta, y1, y2 = meta.to(DEVICE), y1.to(DEVICE), y2.to(DEVICE)
 
         # [Batch, n_obj_max, Z, Y, X]
@@ -185,8 +185,11 @@ def main():
 
         # 2. Validation/Evaluation Phase
         model.eval()
+        torch.cuda.empty_cache()
         val_loss = 0.0
+        assert len(loaders["valid"]) > 0, "No validation found"
         with torch.no_grad():
+            z1, z2 = None, None
             for meta, y1, y2 in loaders["valid"]:
                 meta, y1, y2 = meta.to(DEVICE), y1.to(DEVICE), y2.to(DEVICE)
                 # [Batch, n_obj_max, Z, Y, X]
@@ -206,7 +209,39 @@ def main():
                 z2 = model(y2_filtered)
                 loss, _, _ = loss_fn(z1, z2)
                 val_loss += loss.item()
-                print(f"Epoch {epoch}: Val Loss: {val_loss/len(loaders['valid'])}")
+
+            assert isinstance(z1, torch.Tensor) and isinstance(
+                z2, torch.Tensor
+            ), "Sanity test: z1 and z2 were existed if validation > 0"
+
+            # plot cross correlation to visualize
+            n_feature = z1.shape[0]
+            n_obj = z1.shape[1]
+            # Object Space Correlation (N x N)
+            z1_f = (z1 - z1.mean(0)) / (z1.std(0) + loss_fn.eps)
+            z2_f = (z2 - z2.mean(0)) / (z2.std(0) + loss_fn.eps)
+
+            c_feat = torch.matmul(z1_f.T, z2_f) / z1.shape[0]
+            c_feat = c_feat.cpu().detach().numpy()
+            c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
+            c_obj = c_obj.cpu().detach().numpy()
+
+            fig = plt.figure(figsize=(16, 7))
+
+            plot_matrices(
+                c_feat,
+                fig.add_subplot(121),
+                f"Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
+            )
+            plot_matrices(
+                c_obj,
+                fig.add_subplot(122),
+                f"Feature Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
+            )
+            fig.savefig(checkpoint_folder / f"barlow_val_epoch_{epoch}_valid.png")
+            plt.close(fig)
+
+        print(f"Epoch {epoch}: Val Loss: {val_loss/len(loaders['valid'])}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -219,6 +254,23 @@ def main():
                 },
                 checkpoint_folder / "model_best.pt",
             )
+
+            fig = plt.figure(figsize=(16, 7))
+
+            plot_matrices(
+                c_feat,
+                fig.add_subplot(121),
+                f"Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
+            )
+            plot_matrices(
+                c_obj,
+                fig.add_subplot(122),
+                f"Feature Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
+            )
+            fig.savefig(checkpoint_folder / "barlow_val_best.png")
+
+            plt.close(fig)
+
             print(
                 f"Best model saved at epoch {epoch} with val_loss: {best_val_loss:.4f}"
             )
@@ -227,7 +279,8 @@ def main():
 
     plot_loss(train_losses, ax=fig.add_subplot(111))
     fig.tight_layout()
-    fig.savefig(checkpoint_folder / "training_loss.png")
+    fig.savefig(checkpoint_folder / "training_loss_along_epoch.png")
+    plt.close(fig)
 
 
 if __name__ == "__main__":
