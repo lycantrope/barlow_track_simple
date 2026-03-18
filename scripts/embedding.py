@@ -1,8 +1,10 @@
 import argparse
 import os
+import shutil
 from pathlib import Path
 
 import hdf5plugin
+import numpy as np
 import polars as pl
 import torch
 from ruamel.yaml import YAML, scalarfloat
@@ -38,22 +40,27 @@ def embed_using_barlow(
     use_projection_space - if True, uses the post-projection head space; most SSL approaches discard the projector (i.e. set this to False)
     """
     # names = dataset.which_neurons
-    device = next(model.parameters()).device
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        pin_memory=torch.cuda.is_available(),
+        shuffle=False,
+        num_workers=torch.get_num_threads(),
+        persistent_workers=False,
+    )
+    with torch.no_grad():
+        for centroids, batch in loader:
+            if isinstance(batch, np.ndarray):
+                batch = torch.from_numpy(batch)
 
-    for t_idx in dataset.t_indice:
-        for centroids, batch in dataset.batched_iter_patches_at(
-            t_idx,
-            batch_size=batch_size,
-        ):
-            with torch.no_grad():
-                batch = torch.from_numpy(batch).to(device)
-                if use_projection_space:
-                    embeddings = model(batch)
-                else:
-                    embeddings = model.backbone(batch)
-                embeddings = embeddings.cpu().detach().numpy()
-            N = batch.shape[0]
-            yield centroids, batch.reshape(N, -1)
+            batch = batch.to(DEVICE, non_blocking=True)
+            if use_projection_space:
+                embeds = model(batch)
+            else:
+                embeds = model.backbone(batch)
+            yield np.asarray(centroids), embeds.cpu().detach().numpy().reshape(
+                batch.size(0), -1
+            )
 
 
 def run_embedding():
@@ -61,7 +68,7 @@ def run_embedding():
 
     parser.add_argument("--cfg_path", type=str, required=True)
     parser.add_argument("--data_folder", type=str, required=True)
-
+    parser.add_argument("--batch_size", type=int, default=512)
     args = parser.parse_args()
 
     cfg_path = Path(args.cfg_path)
@@ -98,46 +105,57 @@ def run_embedding():
             pretrained_model_path = cfg_path.parent / pretrained_model_path
         state_dict = torch.load(pretrained_model_path, map_location="cpu")
         print(f"Model weights loaded: {pretrained_model_path}")
-
     model = BarlowTwinsEmbed3D.init_model(
         cfg["projector"],
         crop_sz,
         cfg["backbone_type"],
         cfg.get("projector_final"),
     )
+    assert state_dict, "No state_dict found. Please make sure your setting is corrects"
 
-    if state_dict:
-        model.load_state_dict(state_dict.get("model_state_dict", state_dict))
+    model.load_state_dict(state_dict.get("model_state_dict", state_dict))
 
     model.to(DEVICE)
-
+    model.eval()
     datasets = ImageDataset.load_all_volumes(dataset_list, target_sz=crop_sz)
 
     print("Start embedding")
 
     for dataset in tqdm(datasets, total=len(datasets)):
-        name = dataset.filepath.stem
-        outputpath = dataset.filepath.with_name(name + "_embed.parquet")
-        all_chunks = []
-        for centroids, embed in embed_using_barlow(
-            model,
-            dataset,
-            args.use_projection_space,
-            args.batch_size,
+
+        outputdir = dataset.filepath.parent
+        tmp_dir = outputdir / "tmp"
+        if tmp_dir.exists():
+            shutil.rmtree(os.fspath(tmp_dir))
+        tmp_dir.mkdir(exist_ok=True)
+
+        for i, (centroids, embed) in enumerate(
+            embed_using_barlow(
+                model,
+                dataset,
+                args.use_projection_space,
+                args.batch_size,  # We using batch_size from the CLI imput
+            )
         ):
 
             df_meta = pl.from_numpy(
                 centroids, schema=["object_id", "t", "z", "y", "x", "pixel_value"]
             )
 
-            df_t = df_meta.with_columns(
+            df_meta.with_columns(
                 pl.Series("embedding", embed, dtype=pl.List(pl.Float32))
-            )
-            all_chunks.append(df_t)
+            ).write_parquet(tmp_dir / f"parts.{i:05d}.parquet")
 
-        final_df = pl.concat(all_chunks)
-        final_df.write_parquet(outputpath)
-        del all_chunks, final_df
+        name = dataset.filepath.stem
+        outputpath = outputdir / (name + "_embed.parquet")
+        print(f"Save final parquet to: {outputpath}")
+        pl.scan_parquet(tmp_dir / "*.parquet").sink_parquet(
+            outputpath,
+            compression="zstd",
+            compression_level=5,
+        )
+
+        shutil.rmtree(os.fspath(tmp_dir))
 
     print("Finished all embedding")
 

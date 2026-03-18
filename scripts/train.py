@@ -58,7 +58,9 @@ def run_epoch(
     pbar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
     for batch_idx, (meta, y1, y2) in pbar:
         optimizer.zero_grad(set_to_none=True)
-        meta, y1, y2 = meta.to(DEVICE), y1.to(DEVICE), y2.to(DEVICE)
+        meta = meta.to(DEVICE, non_blocking=True)  # type: torch.Tensor
+        y1 = y1.to(DEVICE, non_blocking=True)  # type: torch.Tensor
+        y2 = y2.to(DEVICE, non_blocking=True)  # type: torch.Tensor
 
         # [Batch, n_obj_max, Z, Y, X]
         Z, Y, X = y1.shape[-3:]
