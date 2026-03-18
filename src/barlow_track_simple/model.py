@@ -20,6 +20,21 @@ def off_diagonal(x: torch.Tensor) -> torch.Tensor:
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
 
+def init_weights_kaiming(m):
+    # Check if the module is a 3D Convolution
+    if isinstance(m, nn.Conv3d):
+        # Using 'fan_out' preserves magnitudes in the backward pass
+        # 'nonlinearity' should match your activation (e.g., 'relu')
+        nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+
+    # Also initialize BatchNorm if present to keep signals stable
+    elif isinstance(m, nn.BatchNorm3d):
+        nn.init.constant_(m.weight, 1)
+        nn.init.constant_(m.bias, 0)
+
+
 class BarlowTwinsEmbed3D(nn.Module):
     def __init__(
         self,
@@ -76,7 +91,8 @@ class BarlowTwinsEmbed3D(nn.Module):
                 num_levels=2,
                 f_maps=4,
                 crop_sz=crop_sz,
-            )
+            ).apply(init_weights_kaiming)
+
         else:
             # This is deprecated ?
             raise ValueError("backbone_type only support ResidualEncoder3D")
