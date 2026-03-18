@@ -118,7 +118,7 @@ class BarlowTwinsDualLoss(nn.Module):
     def loss_from_matrix(self, c: torch.Tensor):
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = self.off_diagonal(c).pow_(2).sum()
-        return (on_diag + self.lambd * off_diag) / c.numel()
+        return (on_diag + self.lambd * off_diag) / c.shape[0]
 
     def forward(self, z1: torch.Tensor, z2: torch.Tensor):
         # Feature Space Correlation (D x D)
@@ -127,9 +127,10 @@ class BarlowTwinsDualLoss(nn.Module):
         c_feat = torch.matmul(z1_f.T, z2_f) / z1.shape[0]
 
         # Object Space Correlation (N x N)
-        z1_o = (z1 - z1.mean(1, keepdim=True)) / (z1.std(1, keepdim=True) + self.eps)
-        z2_o = (z2 - z2.mean(1, keepdim=True)) / (z2.std(1, keepdim=True) + self.eps)
-        c_obj = torch.matmul(z1_o, z2_o.T) / z1.shape[1]
+        # z1_o = (z1 - z1.mean(1, keepdim=True)) / (z1.std(1, keepdim=True) + self.eps)
+        # z2_o = (z2 - z2.mean(1, keepdim=True)) / (z2.std(1, keepdim=True) + self.eps)
+        # We tried to use normalization of features only to make this works
+        c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
 
         l_feat = self.loss_from_matrix(c_feat)
         l_obj = self.loss_from_matrix(c_obj)
