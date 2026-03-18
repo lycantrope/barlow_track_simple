@@ -1,4 +1,5 @@
 import argparse
+from collections import OrderedDict
 from pathlib import Path
 from typing import Union
 
@@ -20,6 +21,24 @@ yaml = YAML()
 DEVICE = get_device()
 
 print(f"Use device: {DEVICE}")
+
+
+def check_feature_collapse(features: torch.Tensor) -> torch.Tensor:
+    # features: [N, 512]
+    # Center the features
+    features = features - features.mean(dim=0)
+
+    # Get Singular Values
+    _, S, _ = torch.svd(features)
+
+    # Normalize singular values so they sum to 1
+    S_norm = S / S.sum()
+
+    # Calculate Shannon Entropy of the singular values
+    # Higher entropy = No collapse (features are spread out)
+    # Lower entropy = Collapse (only a few dimensions carry info)
+    entropy = -torch.sum(S_norm * torch.log(S_norm + 1e-8))
+    return entropy
 
 
 def run_epoch(
@@ -59,7 +78,6 @@ def run_epoch(
 
         total_loss = torch.tensor(0.0, device=DEVICE)
         valid_loss_count = 0
-
         for t in unique_times:
             # Filter features belonging only to time 't'
             t_mask = valid_t_indice == t
@@ -69,13 +87,14 @@ def run_epoch(
                 continue
 
             # Check the mean of the standard deviations
-            epoch_variances = torch.std(z1_t, dim=0)
-            batch_std = epoch_variances.mean().item()
-            if batch_std < 1e-6:
+            with torch.no_grad():
+                epoch_variances = torch.std(z1_t, dim=0)
+                batch_std = epoch_variances.mean().item()
+                shannon_corr = check_feature_collapse(z1_t).item()
+            if batch_std < 1e-4:
                 print(
-                    f"Epoch {epoch} at Batch {batch_idx}-{t} mean feature variance: {batch_std:.6f}"
+                    f"Wanring Epoch {epoch} at Batch {batch_idx}-{t} Std: {batch_std:.6f} | Shannon:{shannon_corr:.3f}"
                 )
-                continue
 
             loss, _, _ = loss_fn(z1_t, z2_t)
 
@@ -89,7 +108,7 @@ def run_epoch(
             (total_loss / valid_loss_count).backward()
             optimizer.step()
 
-        pbar.set_postfix({"loss": f"{total_loss.item():.4f}"})
+        pbar.set_postfix({"loss": f"{total_loss.item():.4f} "})
 
     avg_loss = epoch_loss / valid_batch_count
     return avg_loss
@@ -129,13 +148,24 @@ def main():
         cfg.get("hdf_key", ""),
     )
 
-    model = BarlowTwinsEmbed3D.load_model(
+    pretrained_model_path = cfg.get("pretrained_model_path")
+    state_dict = {}
+    if pretrained_model_path is not None:
+        pretrained_model_path = Path(pretrained_model_path)
+        if not pretrained_model_path.is_absolute():
+            pretrained_model_path = pretrained_model_path.relative_to(cfg_path.parent)
+        state_dict = torch.load(pretrained_model_path, map_location="cpu")
+        print(f"Model weights loaded: {pretrained_model_path}")
+
+    model = BarlowTwinsEmbed3D.init_model(
         cfg["projector"],
         crop_sz,
         cfg["backbone_type"],
         cfg.get("projector_final"),
-        cfg.get("pretrained_model_path"),
     )
+
+    if state_dict:
+        model.load_state_dict(state_dict.get("model_state_dict", state_dict))
 
     model.to(DEVICE)
 
@@ -156,6 +186,9 @@ def main():
         weight_decay=cfg["weight_decay"],
     )
 
+    if "optimizer_state_dict" in state_dict:
+        optimizer.load_state_dict(state_dict["optimizer_state_dict"])
+
     loaders = get_train_loader(
         dataset_list=dataset_list,
         target_sz=crop_sz,
@@ -165,10 +198,14 @@ def main():
     checkpoint_folder = cfg_path.parent / "checkpoints"
     checkpoint_folder.mkdir(exist_ok=True)
     train_losses = []
-    best_val_loss = float("inf")
+    best_val_loss = state_dict.get("val_loss_avg", float("inf"))
+    start_epoch = state_dict.get("epoch", 0)
     # Training
     print("Start training")
-    for epoch in range(cfg["epochs"]):
+    if start_epoch > 0:
+        print(f"Resume from epoch: {start_epoch}| best_val_loss: {best_val_loss:.4f}")
+
+    for epoch in range(start_epoch, start_epoch + cfg["epochs"]):
         avg_val_loss = run_epoch(epoch, loaders["train"], model, loss_fn, optimizer)
 
         # 3. Save Intermediate Checkpoint
@@ -178,7 +215,7 @@ def main():
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
             },
-            checkpoint_folder / "model_last.pt",
+            checkpoint_folder / "model_last.pth",
         )
         train_losses.append(avg_val_loss)
 
@@ -262,26 +299,27 @@ def main():
             fig.add_subplot(224),
             f"Projector: Object Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
         )
-        fig.savefig(checkpoint_folder / f"barlow_val_epoch_{epoch}_valid.png")
+        fig.savefig(checkpoint_folder / f"barlow_val_epoch_{epoch:0>3d}_valid.png")
 
-        print(f"Epoch {epoch}: Val Loss: {val_loss/len(loaders['valid'])}")
+        val_loss_avg = val_loss / len(loaders["valid"])
+        print(f"Epoch {epoch}: Avg Val Loss : {val_loss_avg}")
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        if val_loss_avg < best_val_loss:
+            best_val_loss = val_loss_avg
             torch.save(
                 {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "val_loss": best_val_loss,
+                    "val_loss_avg": val_loss_avg,
                 },
-                checkpoint_folder / "model_best.pt",
+                checkpoint_folder / "model_best.pth",
             )
 
             fig.savefig(checkpoint_folder / "barlow_val_best.png")
 
             print(
-                f"Best model saved at epoch {epoch} with val_loss: {best_val_loss:.4f}"
+                f"Best model saved at epoch {epoch} with avg. val_loss: {val_loss_avg:.4f}"
             )
 
         plt.close(fig)

@@ -85,13 +85,24 @@ def run_embedding():
         cfg.get("hdf_key", ""),
     )
 
-    model = BarlowTwinsEmbed3D.load_model(
+    pretrained_model_path = cfg.get("pretrained_model_path")
+    state_dict = {}
+    if pretrained_model_path is not None:
+        pretrained_model_path = Path(pretrained_model_path)
+        if not pretrained_model_path.is_absolute():
+            pretrained_model_path = pretrained_model_path.relative_to(cfg_path.parent)
+        state_dict = torch.load(pretrained_model_path, map_location="cpu")
+        print(f"Model weights loaded: {pretrained_model_path}")
+
+    model = BarlowTwinsEmbed3D.init_model(
         cfg["projector"],
         crop_sz,
         cfg["backbone_type"],
         cfg.get("projector_final"),
-        cfg.get("pretrained_model_path"),
     )
+
+    if state_dict:
+        model.load_state_dict(state_dict.get("model_state_dict", state_dict))
 
     model.to(DEVICE)
 

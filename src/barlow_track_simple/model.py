@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Literal, Optional, Sequence, Tuple
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -72,13 +72,12 @@ class BarlowTwinsEmbed3D(nn.Module):
         return self.projector(self.backbone(x))
 
     @classmethod
-    def load_model(
+    def init_model(
         cls,
         projector: str,
         crop_sz: Tuple[int, int, int],
         backbone_type: Literal["ResidualEncoder3D", "Siamese"],
         projector_final: Optional[int] = None,
-        pretrained_model_path: Optional[os.PathLike] = None,
     ) -> "BarlowTwinsEmbed3D":
         """
         Loads a model directly from the weights file, and assumes the args are saved in the same folder as args.pickle
@@ -103,18 +102,6 @@ class BarlowTwinsEmbed3D(nn.Module):
             backbone=backbone,
             projector_final=projector_final,
         )
-
-        if pretrained_model_path is None or not Path(pretrained_model_path).is_file():
-            return model
-
-        pretrained_model_path = Path(pretrained_model_path)
-
-        state_dict = torch.load(pretrained_model_path)
-        if state_dict.get("model", None) is not None:
-            # Then this was a saved checkpoint, and we should load just the model
-            state_dict = state_dict["model"]
-        print(f"Model weights was loaded: {pretrained_model_path}")
-        model.load_state_dict(state_dict)
 
         return model
 

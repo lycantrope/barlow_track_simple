@@ -5,7 +5,7 @@ project_path:
 
 # Optional (but recommended) path to a pretrained model; note that the architecture parameters must be the same for this to work
 # If you want to train from scratch, set this to null
-pretrained_model_path:  # Directly pass the .pth file of the pretrained model (the model weights)
+pretrained_model_path:  "" # Directly pass the .pth file of the pretrained model (the model weights)
 
 
 ####
