@@ -69,6 +69,7 @@ def run_embedding():
     parser.add_argument("--cfg_path", type=str, required=True)
     parser.add_argument("--data_folder", type=str, required=True)
     parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--use_projection_space", action="store_true")
     args = parser.parse_args()
 
     cfg_path = Path(args.cfg_path)
