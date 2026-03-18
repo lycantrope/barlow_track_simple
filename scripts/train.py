@@ -10,7 +10,6 @@ from tqdm.auto import tqdm
 from barlow_track_simple.config import get_device
 from barlow_track_simple.dataloader import get_train_loader, verify_input_data
 from barlow_track_simple.model import (
-    LARS,
     BarlowTwinsDualLoss,
     BarlowTwinsEmbed3D,
 )
@@ -207,6 +206,7 @@ def main():
 
                 z1 = model(y1_filtered)
                 z2 = model(y2_filtered)
+
                 loss, _, _ = loss_fn(z1, z2)
                 val_loss += loss.item()
 
@@ -214,32 +214,55 @@ def main():
                 z2, torch.Tensor
             ), "Sanity test: z1 and z2 were existed if validation > 0"
 
+            n_obj, n_feature = z1.shape
+
+            z1_embed = model.backbone(y1_filtered)  # type: ignore
+            z2_embed = model.backbone(y2_filtered)  # type: ignore
+
+            z1_embed = z1_embed.view(n_obj, -1)  # type: torch.Tensor
+            z2_embed = z2_embed.view(n_obj, -1)  # type: torch.Tensor
+            z1_embed_f = (z1_embed - z1_embed.mean(0)) / (z1_embed.std(0) + loss_fn.eps)
+            z2_embed_f = (z2_embed - z2_embed.mean(0)) / (z2_embed.std(0) + loss_fn.eps)
+
+            embed_c_feat = torch.matmul(z1_embed_f.T, z2_embed_f) / z1.shape[0]
+            embed_c_feat = embed_c_feat.cpu().detach().numpy()
+            embed_c_obj = torch.matmul(z1_embed_f, z2_embed_f.T) / z1.shape[1]
+            embed_c_obj = embed_c_obj.cpu().detach().numpy()
+
             # plot cross correlation to visualize
-            n_feature = z1.shape[0]
-            n_obj = z1.shape[1]
+
             # Object Space Correlation (N x N)
             z1_f = (z1 - z1.mean(0)) / (z1.std(0) + loss_fn.eps)
             z2_f = (z2 - z2.mean(0)) / (z2.std(0) + loss_fn.eps)
 
-            c_feat = torch.matmul(z1_f.T, z2_f) / z1.shape[0]
-            c_feat = c_feat.cpu().detach().numpy()
-            c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
-            c_obj = c_obj.cpu().detach().numpy()
+            proj_c_feat = torch.matmul(z1_f.T, z2_f) / z1.shape[0]
+            proj_c_feat = proj_c_feat.cpu().detach().numpy()
+            proj_c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
+            proj_c_obj = proj_c_obj.cpu().detach().numpy()
 
-            fig = plt.figure(figsize=(16, 7))
+        fig = plt.figure(figsize=(16, 14))
+        plot_matrices(
+            embed_c_feat,
+            fig.add_subplot(221),
+            f"Backbone: Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
+        )
+        plot_matrices(
+            embed_c_obj,
+            fig.add_subplot(222),
+            f"Backbone: Object Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
+        )
 
-            plot_matrices(
-                c_feat,
-                fig.add_subplot(121),
-                f"Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
-            )
-            plot_matrices(
-                c_obj,
-                fig.add_subplot(122),
-                f"Feature Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
-            )
-            fig.savefig(checkpoint_folder / f"barlow_val_epoch_{epoch}_valid.png")
-            plt.close(fig)
+        plot_matrices(
+            proj_c_feat,
+            fig.add_subplot(223),
+            f"Projector: Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
+        )
+        plot_matrices(
+            proj_c_obj,
+            fig.add_subplot(224),
+            f"Projector: Object Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
+        )
+        fig.savefig(checkpoint_folder / f"barlow_val_epoch_{epoch}_valid.png")
 
         print(f"Epoch {epoch}: Val Loss: {val_loss/len(loaders['valid'])}")
 
@@ -255,25 +278,13 @@ def main():
                 checkpoint_folder / "model_best.pt",
             )
 
-            fig = plt.figure(figsize=(16, 7))
-
-            plot_matrices(
-                c_feat,
-                fig.add_subplot(121),
-                f"Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
-            )
-            plot_matrices(
-                c_obj,
-                fig.add_subplot(122),
-                f"Feature Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
-            )
             fig.savefig(checkpoint_folder / "barlow_val_best.png")
-
-            plt.close(fig)
 
             print(
                 f"Best model saved at epoch {epoch} with val_loss: {best_val_loss:.4f}"
             )
+
+        plt.close(fig)
 
     fig = plt.figure()
 
