@@ -31,7 +31,7 @@ yaml = YAML()
 def embed_using_barlow(
     model: torch.nn.Module,
     dataset: ImageDataset,
-    batch_size=64,
+    batch_size=4,
 ):
     """
     Use a trained model to project a dataset into the latent space
@@ -43,20 +43,35 @@ def embed_using_barlow(
         batch_size=batch_size,
         pin_memory=torch.cuda.is_available(),
         shuffle=False,
-        num_workers=torch.get_num_threads(),
+        num_workers=max(torch.get_num_threads() // 2, 1),
         persistent_workers=False,
     )
     with torch.no_grad():
         for centroids, batch in tqdm(loader, total=len(loader)):
             if isinstance(batch, np.ndarray):
                 batch = torch.from_numpy(batch)
+            if isinstance(centroids, np.ndarray):
+                centroids = torch.from_numpy(centroids)
 
             batch = batch.to(DEVICE, dtype=torch.float32, non_blocking=True)
+            centroids = centroids.to(DEVICE, non_blocking=True)
 
-            embeds = model(batch)
+            # [Batch, n_obj_max, Z, Y, X]
+            Z, Y, X = batch.shape[-3:]
+            # [Batch, n_obj_max, Z, Y, X] => [batch*n_obj_max, 1, Z, Y, X]
+            batch = batch.view(-1, 1, Z, Y, X)
+            # [Batch, n_obj_max, 6] => [Batch * n_obj_max, 6]
+            t_indice_flat = centroids[:, :, 1].view(-1)
 
-            yield np.asarray(centroids), embeds.cpu().detach().numpy().reshape(
-                batch.size(0), -1
+            mask = t_indice_flat >= 0
+
+            batch_filtered = batch[mask]
+            centroids = centroids[mask]
+            # Forward pass
+            embeds = model(batch_filtered)  # type: torch.Tensor
+
+            yield centroids.cpu().numpy(), embeds.cpu().numpy().reshape(
+                embeds.size(0), -1
             )
 
 
@@ -65,7 +80,7 @@ def run_embedding():
 
     parser.add_argument("--cfg_path", type=str, required=True)
     parser.add_argument("--data_folder", type=str, required=True)
-    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--use_projection_space", action="store_true")
     args = parser.parse_args()
 
@@ -122,10 +137,12 @@ def run_embedding():
 
     model.to(DEVICE)
     model.eval()
-    datasets = ImageDataset.load_all_volumes(dataset_list, target_sz=crop_sz)
+    datasets = [
+        ImageDataset(stack, csv_path, crop_sz) for (stack, csv_path) in dataset_list
+    ]
 
     print("Start embedding")
-    max_buffer = 50
+    max_buffer = 25
     for i, dataset in enumerate(datasets, start=1):
         print(f"({i}/{len(datapaths)}) Embedding: {dataset.filepath.name} ")
         outputdir = dataset.filepath.parent

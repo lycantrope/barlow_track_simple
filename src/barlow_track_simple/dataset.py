@@ -396,10 +396,10 @@ class ImageDataset(torch.utils.data.Dataset):
 
         return img
 
-    def __getitem__(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
+    def get_patch_by_object_id(self, object_id: int) -> Tuple[np.ndarray, np.ndarray]:
         assert self.imagestack.data is not None, "Must be init before access"
 
-        centroid = self.centroids[idx]
+        centroid = self.centroids[object_id]
 
         _id, t, z, y, x, pix_val = centroid
 
@@ -433,16 +433,17 @@ class ImageDataset(torch.utils.data.Dataset):
         patch = patch[None, ...]
         return centroid, self.normalize(patch)
 
-    def __len__(self):
-        return self.n_obj
+    def __len__(self) -> int:
+        return len(self.t_indice)
 
-    def iter_patches_at(self, t_idx: int) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+    def __getitem__(self, t_idx: int) -> Tuple[np.ndarray, np.ndarray]:
         assert self.imagestack.data is not None, "Must be init before access"
 
         if t_idx not in self.t_indice:
             raise IndexError(f"No {t_idx} found in dataset")
 
         centroids = self.centroids[self.centroids[:, 1] == t_idx]
+        n_obj, n_feat = centroids.shape
 
         pad_width = [(sz // 2 + sz % 2 - 1, sz // 2) for sz in self.target_sz]
         data = np.asarray(self.imagestack.data[t_idx])
@@ -450,45 +451,27 @@ class ImageDataset(torch.utils.data.Dataset):
         data = np.pad(data, pad_width=pad_width)
 
         wz, wy, wx = self.target_sz
-        for centroid in centroids:
-            _, _, z, y, x, _ = centroid
-            patch = data[z : z + wz, y : y + wy, x : x + wx]
-            yield centroid, patch[None, ...]
 
-        # # Following code is to get all patches at once
-        # gz, gy, gx = np.mgrid[:wz, :wy, wx]
-        # all_z = centroids[:, 2, None, None, None] + gz
-        # all_y = centroids[:, 3, None, None, None] + gy
-        # all_x = centroids[:, 4, None, None, None] + gx
+        # Extract patches at once
+        gz, gy, gx = np.mgrid[:wz, :wy, :wx]
+        all_z = centroids[:, 2, None, None, None] + gz
+        all_y = centroids[:, 3, None, None, None] + gy
+        all_x = centroids[:, 4, None, None, None] + gx
 
-        # return data[all_z, all_y, all_x]
+        n_obj_max = self.n_obj_max
 
-    def batched_iter_patches_at(
-        self, t_idx: int, batch_size: int = 32
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
-        """Yields batches of patches instead of single patches."""
-        batch = []
-        for centroid, patch in self.iter_patches_at(t_idx):
-            batch.append((centroid, patch))
-            if len(batch) == batch_size:
-                # Stack into a single tensor for the model
-                centroids, patches = tuple(map(np.stack, zip(*batch)))
-                yield centroids, patches
-                batch = []
+        # Padding the patches to max length of objects
+        y_all = np.zeros((n_obj_max, wz, wy, wx), dtype=data.dtype)
+        centroids_all = np.full(
+            (n_obj_max, n_feat),
+            dtype=centroids.dtype,
+            fill_value=-1,
+        )
 
-        # Yield the remaining patches if they don't fill a full batch
-        if batch:
-            # Stack into a single tensor for the model
-            centroids, patches = tuple(map(np.stack, zip(*batch)))
-            yield centroids, patches
+        y_all[:n_obj] = data[all_z, all_y, all_x]
+        centroids_all[:n_obj] = centroids
 
-    @classmethod
-    def load_all_volumes(
-        cls,
-        data_list: Sequence[Tuple[Stack, Path]],
-        target_sz: Tuple[int, int, int] = (8, 64, 64),
-    ) -> List["ImageDataset"]:
-        return [cls(stack, csv_path, target_sz) for (stack, csv_path) in data_list]
+        return centroids_all, self.normalize(y_all)
 
     @property
     def filepath(self) -> Path:
@@ -510,19 +493,14 @@ class NeuronAugmentedImagePairDataset(torch.utils.data.Dataset):
         transform_args = transform_args or dict()
         self.augmentor = Transform(**transform_args)
 
-    def __len__(self):
+    def __len__(self) -> int:
         # Simply delegate the length to the base
-        return len(self.base_dataset.t_indice)
+        return len(self.base_dataset)
 
     def __getitem__(
         self, t_idx: int
     ) -> Tuple[np.ndarray, npt.ArrayLike, npt.ArrayLike]:
-        n_obj_max = self.base_dataset.n_obj_max
-        centroids = np.full((n_obj_max, 6), fill_value=-1)
-        y_all = np.zeros((n_obj_max, *self.base_dataset.target_sz))
-        for i, (centroid, y) in enumerate(self.base_dataset.iter_patches_at(t_idx)):
-            centroids[i] = centroid
-            y_all[i] = y
+        centroids, y_all = self.base_dataset[t_idx]
         y1, y2 = self.augmentor(y_all)
         return centroids, y1, y2
 
