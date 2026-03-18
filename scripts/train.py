@@ -5,7 +5,7 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 import torch
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, scalarfloat
 from tqdm.auto import tqdm
 
 from barlow_track_simple.config import get_device
@@ -17,6 +17,10 @@ from barlow_track_simple.model import (
 from barlow_track_simple.plot import plot_loss, plot_matrices
 
 yaml = YAML()
+
+# This will tell pytorch load scalarfloat safely
+torch.serialization.add_safe_globals([scalarfloat.ScalarFloat])
+
 
 DEVICE = get_device()
 

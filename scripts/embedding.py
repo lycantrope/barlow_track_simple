@@ -5,7 +5,7 @@ from pathlib import Path
 import hdf5plugin
 import polars as pl
 import torch
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, scalarfloat
 from tqdm.auto import tqdm
 
 from barlow_track_simple.config import get_device
@@ -14,6 +14,10 @@ from barlow_track_simple.dataset import ImageDataset
 from barlow_track_simple.model import BarlowTwinsEmbed3D
 
 os.environ["HDF5_PLUGIN_PATH"] = hdf5plugin.PLUGINS_PATH
+
+# This will tell pytorch load scalarfloat safely
+torch.serialization.add_safe_globals([scalarfloat.ScalarFloat])
+
 
 DEVICE = get_device()
 
