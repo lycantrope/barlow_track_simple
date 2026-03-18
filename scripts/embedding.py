@@ -49,7 +49,7 @@ def embed_using_barlow(
         persistent_workers=False,
     )
     with torch.no_grad():
-        for centroids, batch in loader:
+        for centroids, batch in tqdm(loader, total=len(loader)):
             if isinstance(batch, np.ndarray):
                 batch = torch.from_numpy(batch)
 
@@ -122,8 +122,8 @@ def run_embedding():
 
     print("Start embedding")
 
-    for dataset in tqdm(datasets, total=len(datasets)):
-
+    for i, dataset in enumerate(datasets, start=1):
+        print(f"({i}/{len(datapaths)}) Embedding: {dataset.filepath.name} ")
         outputdir = dataset.filepath.parent
         tmp_dir = outputdir / "tmp"
         if tmp_dir.exists():
