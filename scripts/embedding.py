@@ -51,9 +51,9 @@ def embed_using_barlow(
     with torch.no_grad():
         for centroids, batch in loader:
             if isinstance(batch, np.ndarray):
-                batch = torch.from_numpy(batch).float()
+                batch = torch.from_numpy(batch)
 
-            batch = batch.to(DEVICE, non_blocking=True)
+            batch = batch.to(DEVICE, dtype=torch.float32, non_blocking=True)
             if use_projection_space:
                 embeds = model(batch)
             else:
