@@ -29,15 +29,13 @@ yaml = YAML()
 
 
 def embed_using_barlow(
-    model: BarlowTwinsEmbed3D,
+    model: torch.nn.Module,
     dataset: ImageDataset,
-    use_projection_space: bool = False,
     batch_size=64,
 ):
     """
     Use a trained model to project a dataset into the latent space
 
-    use_projection_space - if True, uses the post-projection head space; most SSL approaches discard the projector (i.e. set this to False)
     """
     # names = dataset.which_neurons
     loader = torch.utils.data.DataLoader(
@@ -54,10 +52,9 @@ def embed_using_barlow(
                 batch = torch.from_numpy(batch)
 
             batch = batch.to(DEVICE, dtype=torch.float32, non_blocking=True)
-            if use_projection_space:
-                embeds = model(batch)
-            else:
-                embeds = model.backbone(batch)
+
+            embeds = model(batch)
+
             yield np.asarray(centroids), embeds.cpu().detach().numpy().reshape(
                 batch.size(0), -1
             )
@@ -106,6 +103,7 @@ def run_embedding():
             pretrained_model_path = cfg_path.parent / pretrained_model_path
         state_dict = torch.load(pretrained_model_path, map_location="cpu")
         print(f"Model weights loaded: {pretrained_model_path}")
+
     model = BarlowTwinsEmbed3D.init_model(
         cfg["projector"],
         crop_sz,
@@ -116,12 +114,18 @@ def run_embedding():
 
     model.load_state_dict(state_dict.get("model_state_dict", state_dict))
 
+    if not args.use_projection_space:
+        backbone = model.backbone
+        del model
+        model = backbone
+        torch.cuda.empty_cache()
+
     model.to(DEVICE)
     model.eval()
     datasets = ImageDataset.load_all_volumes(dataset_list, target_sz=crop_sz)
 
     print("Start embedding")
-
+    max_buffer = 50
     for i, dataset in enumerate(datasets, start=1):
         print(f"({i}/{len(datapaths)}) Embedding: {dataset.filepath.name} ")
         outputdir = dataset.filepath.parent
@@ -130,11 +134,11 @@ def run_embedding():
             shutil.rmtree(os.fspath(tmp_dir))
         tmp_dir.mkdir(exist_ok=True)
 
+        buffer = []
         for i, (centroids, embed) in enumerate(
             embed_using_barlow(
                 model,
                 dataset,
-                args.use_projection_space,
                 args.batch_size,  # We using batch_size from the CLI imput
             )
         ):
@@ -143,9 +147,18 @@ def run_embedding():
                 centroids, schema=["object_id", "t", "z", "y", "x", "pixel_value"]
             )
 
-            df_meta.with_columns(
-                pl.Series("embedding", embed, dtype=pl.List(pl.Float32))
-            ).write_parquet(tmp_dir / f"parts.{i:05d}.parquet")
+            buffer.append(
+                df_meta.with_columns(
+                    pl.Series("embedding", embed, dtype=pl.List(pl.Float32))
+                )
+            )
+
+            if len(buffer) > max_buffer:
+                pl.concat(buffer).write_parquet(tmp_dir / f"parts.{i:05d}.parquet")
+                buffer = []
+
+        if buffer:
+            pl.concat(buffer).write_parquet(tmp_dir / f"parts.{i:05d}.parquet")
 
         name = dataset.filepath.stem
         outputpath = outputdir / (name + "_embed.parquet")
