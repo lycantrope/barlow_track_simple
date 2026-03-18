@@ -153,7 +153,8 @@ def main():
     if pretrained_model_path is not None:
         pretrained_model_path = Path(pretrained_model_path)
         if not pretrained_model_path.is_absolute():
-            pretrained_model_path = pretrained_model_path.relative_to(cfg_path.parent)
+            # Relative to config.yaml
+            pretrained_model_path = cfg_path.parent / pretrained_model_path
         state_dict = torch.load(pretrained_model_path, map_location="cpu")
         print(f"Model weights loaded: {pretrained_model_path}")
 
