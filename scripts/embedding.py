@@ -61,10 +61,9 @@ def embed_using_barlow(
             # [Batch, n_obj_max, Z, Y, X] => [batch*n_obj_max, 1, Z, Y, X]
             batch = batch.view(-1, 1, Z, Y, X)
             # [Batch, n_obj_max, 6] => [Batch * n_obj_max, 6]
-            t_indice_flat = centroids[:, :, 1].view(-1)
+            centroids = centroids.view(-1, centroids.size(2))
 
-            mask = t_indice_flat >= 0
-
+            mask = centroids[:, 0] >= 0
             batch_filtered = batch[mask]
             centroids = centroids[mask]
             # Forward pass
