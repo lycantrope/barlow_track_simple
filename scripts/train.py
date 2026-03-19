@@ -55,7 +55,7 @@ def run_epoch(
     model.train()
     epoch_loss = 0.0
     valid_batch_count = 0
-    pbar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch+1}")
+    pbar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch}")
     for batch_idx, (meta, y1, y2) in pbar:
         optimizer.zero_grad(set_to_none=True)
         meta = meta.to(DEVICE, non_blocking=True)  # type: torch.Tensor
