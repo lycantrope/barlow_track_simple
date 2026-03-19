@@ -172,7 +172,7 @@ def main():
     )
 
     if state_dict:
-        model.load_state_dict(state_dict.get("model_state_dict", state_dict))
+        model.load_state_dict(state_dict.get("model", state_dict))
 
     model.to(DEVICE)
 
@@ -193,8 +193,8 @@ def main():
         weight_decay=cfg["weight_decay"],
     )
 
-    if "optimizer_state_dict" in state_dict:
-        optimizer.load_state_dict(state_dict["optimizer_state_dict"])
+    if "optimizer" in state_dict:
+        optimizer.load_state_dict(state_dict["optimizer"])
 
     loaders = get_train_loader(
         dataset_list=dataset_list,
@@ -219,8 +219,8 @@ def main():
         torch.save(
             {
                 "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
             },
             checkpoint_folder / "model_last.pth",
         )
@@ -316,8 +316,8 @@ def main():
             torch.save(
                 {
                     "epoch": epoch,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
                     "val_loss_avg": val_loss_avg,
                 },
                 checkpoint_folder / "model_best.pth",

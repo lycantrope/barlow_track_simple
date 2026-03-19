@@ -28,6 +28,7 @@ print(f"Use device: {DEVICE}")
 yaml = YAML()
 
 
+@torch.no_grad()
 def embed_using_barlow(
     model: torch.nn.Module,
     dataset: ImageDataset,
@@ -46,34 +47,33 @@ def embed_using_barlow(
         num_workers=max(torch.get_num_threads() // 2, 1),
         persistent_workers=False,
     )
-    with torch.no_grad():
-        for centroids, batch in tqdm(loader, total=len(loader)):
-            if isinstance(batch, np.ndarray):
-                batch = torch.from_numpy(batch)
-            if isinstance(centroids, np.ndarray):
-                centroids = torch.from_numpy(centroids)
+    for centroids, batch in tqdm(loader, total=len(loader)):
+        if isinstance(batch, np.ndarray):
+            batch = torch.from_numpy(batch)
+        if isinstance(centroids, np.ndarray):
+            centroids = torch.from_numpy(centroids)
 
-            batch = batch.to(DEVICE, dtype=torch.float32, non_blocking=True)
-            centroids = centroids.to(DEVICE, non_blocking=True)
+        batch = batch.to(DEVICE, dtype=torch.float32, non_blocking=True)
+        centroids = centroids.to(DEVICE, non_blocking=True)
 
-            # [Batch, n_obj_max, Z, Y, X]
-            Z, Y, X = batch.shape[-3:]
-            # [Batch, n_obj_max, Z, Y, X] => [batch*n_obj_max, 1, Z, Y, X]
-            batch = batch.view(-1, 1, Z, Y, X)
-            # [Batch, n_obj_max, 6] => [Batch * n_obj_max, 6]
-            centroids = centroids.view(-1, centroids.size(2))
+        # [Batch, n_obj_max, Z, Y, X]
+        Z, Y, X = batch.shape[-3:]
+        # [Batch, n_obj_max, Z, Y, X] => [batch*n_obj_max, 1, Z, Y, X]
+        batch = batch.view(-1, 1, Z, Y, X)
+        # [Batch, n_obj_max, 6] => [Batch * n_obj_max, 6]
+        centroids = centroids.view(-1, centroids.size(2))
 
-            mask = centroids[:, 0] >= 0
-            batch_filtered = batch[mask]
-            centroids = centroids[mask]
-            # Forward pass
-            embeds = model(batch_filtered)  # type: torch.Tensor
+        mask = centroids[:, 0] >= 0
+        batch_filtered = batch[mask]
+        centroids = centroids[mask]
+        # Forward pass
+        embeds = model(batch_filtered)  # type: torch.Tensor
 
-            yield centroids.cpu().numpy(), embeds.cpu().numpy().reshape(
-                embeds.size(0), -1
-            )
+        yield centroids.cpu().numpy(), embeds.cpu().numpy().reshape(embeds.size(0), -1)
+        del centroids, batch
 
 
+@torch.no_grad()
 def run_embedding():
     parser = argparse.ArgumentParser()
 
@@ -126,7 +126,7 @@ def run_embedding():
     )
     assert state_dict, "No state_dict found. Please make sure your setting is corrects"
 
-    model.load_state_dict(state_dict.get("model_state_dict", state_dict))
+    model.load_state_dict(state_dict.get("model", state_dict))
 
     if not args.use_projection_space:
         backbone = model.backbone
@@ -172,7 +172,8 @@ def run_embedding():
             )
 
             if len(buffer) > max_buffer:
-                pl.concat(buffer).write_parquet(tmp_dir / f"parts.{i:05d}.parquet")
+                df_all = pl.concat(buffer)  # type: pl.DataFrame
+                df_all.write_parquet(tmp_dir / f"parts.{i:05d}.parquet")
                 buffer = []
 
         if buffer:
@@ -187,7 +188,7 @@ def run_embedding():
                 outputpath,
                 compression="zstd",
                 compression_level=5,
-                row_group_size=10000,
+                row_group_size=10000,  # This significant increase reading speed
             )
         )
         print(f"Save final parquet to: {outputpath}")
