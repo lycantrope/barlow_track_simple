@@ -81,6 +81,8 @@ def run_embedding():
     parser.add_argument("--data_folder", type=str, required=True)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--use_projection_space", action="store_true")
+    parser.add_argument("--embed_using_scratch", action="store_true")
+
     args = parser.parse_args()
 
     cfg_path = Path(args.cfg_path)
@@ -110,13 +112,17 @@ def run_embedding():
 
     pretrained_model_path = cfg.get("pretrained_model_path")
     state_dict = {}
-    if pretrained_model_path is not None:
+    if pretrained_model_path:
         pretrained_model_path = Path(pretrained_model_path)
         if not pretrained_model_path.is_absolute():
             # Relative to config.yaml
             pretrained_model_path = cfg_path.parent / pretrained_model_path
         state_dict = torch.load(pretrained_model_path, map_location="cpu")
         print(f"Model weights loaded: {pretrained_model_path}")
+    else:
+        if not args.embed_using_scratch:
+            raise ValueError(f"Cannot find pretrained model. : {pretrained_model_path}")
+        print("Cannot find pretrain model, Embedding using scratch model.")
 
     model = BarlowTwinsEmbed3D.init_model(
         cfg["projector"],

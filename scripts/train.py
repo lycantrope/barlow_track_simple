@@ -156,13 +156,15 @@ def main():
 
     pretrained_model_path = cfg.get("pretrained_model_path")
     state_dict = {}
-    if pretrained_model_path is not None:
+    if pretrained_model_path:
         pretrained_model_path = Path(pretrained_model_path)
         if not pretrained_model_path.is_absolute():
             # Relative to config.yaml
             pretrained_model_path = cfg_path.parent / pretrained_model_path
         state_dict = torch.load(pretrained_model_path, map_location="cpu")
         print(f"Model weights loaded: {pretrained_model_path}")
+    else:
+        print("Cannot find pretrain model, train model from scratch.")
 
     model = BarlowTwinsEmbed3D.init_model(
         cfg["projector"],
@@ -173,7 +175,6 @@ def main():
 
     if state_dict:
         model.load_state_dict(state_dict.get("model", state_dict))
-
     model.to(DEVICE)
 
     # 2. Wrap the model
