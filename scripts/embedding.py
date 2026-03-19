@@ -166,7 +166,7 @@ def run_embedding():
         ):
 
             df_meta = pl.from_numpy(
-                centroids, schema=["object_id", "t", "z", "y", "x", "pixel_value"]
+                centroids, schema=["object_id", "t", "z", "y", "x", "peak_values"]
             )
 
             buffer.append(
