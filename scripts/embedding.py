@@ -166,7 +166,9 @@ def run_embedding():
 
             buffer.append(
                 df_meta.with_columns(
-                    pl.Series("embedding", embed, dtype=pl.List(pl.Float32))
+                    pl.Series(
+                        "embedding", embed, dtype=pl.Array(pl.Float32, embed.shape[1])
+                    )
                 )
             )
 
@@ -179,12 +181,17 @@ def run_embedding():
 
         name = dataset.filepath.stem
         outputpath = outputdir / (name + "_embed.parquet")
-        print(f"Save final parquet to: {outputpath}")
-        pl.scan_parquet(tmp_dir / "*.parquet").sink_parquet(
-            outputpath,
-            compression="zstd",
-            compression_level=5,
+        (
+            pl.scan_parquet(tmp_dir / "*.parquet")
+            .sort("object_id")
+            .sink_parquet(
+                outputpath,
+                compression="zstd",
+                compression_level=5,
+                row_group_size=10000,
+            )
         )
+        print(f"Save final parquet to: {outputpath}")
 
         shutil.rmtree(os.fspath(tmp_dir))
 
