@@ -134,9 +134,15 @@ class BarlowTwinsDualLoss(nn.Module):
         c_feat = torch.matmul(z1_f.T, z2_f) / z1.shape[0]
 
         # Object Space Correlation (N x N)
-        z1_o = F.normalize(z1, p=2, dim=1)
-        z2_o = F.normalize(z2, p=2, dim=1)
-        # Using cosine similarity to maximize the different to the object space
+        # NOTE cosine similarity is not stable
+        # z1_o = F.normalize(z1, p=2, dim=1)
+        # z2_o = F.normalize(z2, p=2, dim=1)
+        # # Using cosine similarity to maximize the different to the object space
+        # c_obj = torch.matmul(z1_o, z2_o.T)
+        z1_0 = z1 - z1.mean(1, keepdim=True)
+        z2_0 = z2 - z2.mean(1, keepdim=True)
+        z1_o = F.normalize(z1_0, p=2, dim=1)
+        z2_o = F.normalize(z2_0, p=2, dim=1)
         c_obj = torch.matmul(z1_o, z2_o.T)
 
         l_feat = self.loss_from_matrix(c_feat, self.lambd_feat)

@@ -112,6 +112,7 @@ def run_epoch(
         # Backward pass
         if valid_loss_count > 0:
             (total_loss / valid_loss_count).backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
         pbar.set_postfix({"loss": f"{total_loss.item():.4f} "})
