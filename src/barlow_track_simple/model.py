@@ -1,9 +1,8 @@
-import os
-from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Sequence, Tuple
+from typing import Literal, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 
 from barlow_track_simple.siamese import (
@@ -107,10 +106,13 @@ class BarlowTwinsEmbed3D(nn.Module):
 
 
 class BarlowTwinsDualLoss(nn.Module):
-    def __init__(self, lambd: float, lambd_obj: float, eps: float = 1e-6):
+    def __init__(
+        self, lambd_feat: float, lambd_obj: float, alpha: float, eps: float = 1e-6
+    ):
         super().__init__()
-        self.lambd = lambd
+        self.lambd_feat = lambd_feat
         self.lambd_obj = lambd_obj
+        self.alpha = alpha
         self.eps = eps
 
     def off_diagonal(self, x):
@@ -118,27 +120,29 @@ class BarlowTwinsDualLoss(nn.Module):
         assert n == m
         return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
-    def loss_from_matrix(self, c: torch.Tensor):
+    def loss_from_matrix(self, c: torch.Tensor, lambd: float) -> torch.Tensor:
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = self.off_diagonal(c).pow_(2).sum()
-        return (on_diag + self.lambd * off_diag) / c.shape[0]
+        return (on_diag + lambd * off_diag) / c.shape[0]
 
     def forward(self, z1: torch.Tensor, z2: torch.Tensor):
         # Feature Space Correlation (D x D)
         z1_f = (z1 - z1.mean(0)) / (z1.std(0) + self.eps)
         z2_f = (z2 - z2.mean(0)) / (z2.std(0) + self.eps)
+        # z1_f = F.normalize(z1)
+        # z2_f = F.normalize(z2)
         c_feat = torch.matmul(z1_f.T, z2_f) / z1.shape[0]
 
         # Object Space Correlation (N x N)
-        # z1_o = (z1 - z1.mean(1, keepdim=True)) / (z1.std(1, keepdim=True) + self.eps)
-        # z2_o = (z2 - z2.mean(1, keepdim=True)) / (z2.std(1, keepdim=True) + self.eps)
-        # We tried to use normalization of features only to make this works
-        c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
+        z1_o = F.normalize(z1, p=2, dim=1)
+        z2_o = F.normalize(z2, p=2, dim=1)
+        # Using cosine similarity to maximize the different to the object space
+        c_obj = torch.matmul(z1_o, z2_o.T)
 
-        l_feat = self.loss_from_matrix(c_feat)
-        l_obj = self.loss_from_matrix(c_obj)
+        l_feat = self.loss_from_matrix(c_feat, self.lambd_feat)
+        l_obj = self.loss_from_matrix(c_obj, self.lambd_obj)
 
-        total_loss = (1.0 - self.lambd_obj) * l_feat + self.lambd_obj * l_obj
+        total_loss = (1.0 - self.alpha) * l_feat + self.alpha * l_obj
         return total_loss, l_feat, l_obj
 
 

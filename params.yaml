@@ -46,7 +46,6 @@ p_RandomNoise: 0.1
 std_RandomNoise: 0.25
 
 # Optimization hyperparameters
-lambd: 0.0051
 batch_size: 2  # Number of Centroids used per time (batch_size, n_obj_max, target_sz_z, target_sz_xy, target_sz_xy)
 weight_decay: 1e-6
 epochs: 50
@@ -62,7 +61,9 @@ lars_adaptation_filter: false
 val_fraction: 0.1
 
 # Hyperparameters for the new (transposed) BarlowTrack loss
-lambd_obj: 0.67  # Set to 1 to only use the transposed loss; 0 means only original BarlowTwins loss
+lambd_feat: 0.0051 # c_features off-orthgonal weights
+lambd_obj: 0.2 # c_obj off-orthgonal weights 
+alpha: 0.67  # the ratio of (c_features + c_obj)  Set to 1 to only use the transposed loss; 0 means only original BarlowTwins loss
 
 # Debugging and logging parameters
 print_freq: 100

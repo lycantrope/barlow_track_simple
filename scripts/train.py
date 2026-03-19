@@ -183,8 +183,9 @@ def main():
         model = torch.nn.DataParallel(model)
 
     loss_fn = BarlowTwinsDualLoss(
-        lambd=cfg["lambd"],
+        lambd_feat=cfg["lambd_feat"],
         lambd_obj=cfg["lambd_obj"],
+        alpha=cfg["alpha"],
     )
 
     optimizer = torch.optim.Adam(
