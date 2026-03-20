@@ -145,7 +145,7 @@ class BarlowTwinsDualLoss(nn.Module):
         # z2_0 = z2 - z2.mean(1, keepdim=True)
         # z1_o = F.normalize(z1_0, p=2, dim=1)
         # z2_o = F.normalize(z2_0, p=2, dim=1)
-        c_obj = torch.matmul(z1_f, z2_f.T)
+        c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
 
         l_feat = self.loss_from_matrix(c_feat, self.lambd_feat)
         l_obj = self.loss_from_matrix(c_obj, self.lambd_obj)
