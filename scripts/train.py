@@ -230,7 +230,7 @@ def main():
     if start_epoch > 0:
         print(f"Resume from epoch: {start_epoch}| best_val_loss: {best_val_loss:.4f}")
 
-    for epoch in range(start_epoch, start_epoch + cfg["epochs"]):
+    for epoch in range(start_epoch, cfg["epochs"]):
         avg_val_loss = run_epoch(
             epoch, loaders["train"], model, loss_fn, optimizer, schedular
         )
@@ -250,7 +250,9 @@ def main():
         # 2. Validation/Evaluation Phase
         model.eval()
         torch.cuda.empty_cache()
-        val_loss = 0.0
+        valid_l_all = 0.0
+        valid_l_feat = 0.0
+        valid_l_obj = 0.0
         assert len(loaders["valid"]) > 0, "No validation found"
         with torch.no_grad():
             z1, z2 = None, None
@@ -272,12 +274,14 @@ def main():
                 z1 = model(y1_filtered)
                 z2 = model(y2_filtered)
 
-                loss, _, _ = loss_fn(z1, z2)
-                val_loss += loss.item()
+                loss, l_feat, l_obj = loss_fn(z1, z2)
+                valid_l_all += loss.item()
+                valid_l_feat += l_feat.item()
+                valid_l_obj += l_obj.item()
 
-            assert isinstance(z1, torch.Tensor) and isinstance(
-                z2, torch.Tensor
-            ), "Sanity test: z1 and z2 were existed if validation > 0"
+            assert isinstance(z1, torch.Tensor) and isinstance(z2, torch.Tensor), (
+                "Sanity test: z1 and z2 were existed if validation > 0"
+            )
 
             n_obj = z1.shape[0]
 
@@ -331,18 +335,22 @@ def main():
         )
         fig.savefig(checkpoint_folder / f"barlow_val_epoch_{epoch:0>3d}_valid.png")
 
-        val_loss_avg = val_loss / len(loaders["valid"])
-        print(f"Epoch {epoch}: Avg Val Loss : {val_loss_avg}")
+        valid_l_all = valid_l_all / len(loaders["valid"])
+        valid_l_feat = valid_l_feat / len(loaders["valid"])
+        valid_l_obj = valid_l_obj / len(loaders["valid"])
+        print(
+            f"Epoch{epoch}:\nLoss:{valid_l_all}\nFeature Loss:{valid_l_feat}\nObject Loss:{valid_l_obj}\n"
+        )
 
-        if val_loss_avg < best_val_loss:
-            best_val_loss = val_loss_avg
+        if valid_l_all < best_val_loss:
+            best_val_loss = valid_l_all
             torch.save(
                 {
                     "epoch": epoch,
                     "model": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "schedular": schedular.state_dict(),
-                    "val_loss_avg": val_loss_avg,
+                    "val_loss_avg": best_val_loss,
                 },
                 checkpoint_folder / "model_best.pth",
             )
@@ -350,7 +358,7 @@ def main():
             fig.savefig(checkpoint_folder / "barlow_val_best.png")
 
             print(
-                f"Best model saved at epoch {epoch} with avg. val_loss: {val_loss_avg:.4f}"
+                f"Best model saved at epoch {epoch} with avg. val_loss: {best_val_loss:.4f}"
             )
 
         plt.close(fig)
