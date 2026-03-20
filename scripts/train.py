@@ -305,7 +305,7 @@ def main():
             proj_c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
             proj_c_obj = proj_c_obj.cpu().detach().numpy()
 
-        fig = plt.figure(figsize=(16, 14))
+        fig = plt.figure(figsize=(16, 14), layout="constrained", frameon=False)
         plot_matrices(
             embed_c_feat,
             fig.add_subplot(221),
@@ -353,7 +353,7 @@ def main():
 
         plt.close(fig)
 
-    fig = plt.figure()
+    fig = plt.figure(layout="constrained", frameon=False)
 
     plot_loss(train_losses, ax=fig.add_subplot(111))
     fig.tight_layout()
