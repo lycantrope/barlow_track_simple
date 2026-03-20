@@ -208,15 +208,18 @@ def main():
         batch_size=cfg.get("batch_size", 64),
     )
 
+    total_steps = len(loaders["train"]) * cfg["epochs"]
     schedular = torch.optim.lr_scheduler.OneCycleLR(
         optimizer=optimizer,
         max_lr=0.0008,
-        total_steps=len(loaders)
-        * cfg["epochs"],  # Use the dynamic total instead of a hardcoded number
+        total_steps=total_steps,
         pct_start=0.3,  # Spend 30% of the 50 epochs ramping up
         div_factor=10,
         final_div_factor=100,
     )
+    if "schedular" in state_dict:
+        schedular.load_state_dict(state_dict["schedular"])
+
     checkpoint_folder = cfg_path.parent / "checkpoints"
     checkpoint_folder.mkdir(exist_ok=True)
     train_losses = []
@@ -238,6 +241,7 @@ def main():
                 "epoch": epoch,
                 "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
+                "schedular": schedular.state_dict(),
             },
             checkpoint_folder / "model_last.pth",
         )
@@ -335,6 +339,7 @@ def main():
                     "epoch": epoch,
                     "model": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
+                    "schedular": schedular.state_dict(),
                     "val_loss_avg": val_loss_avg,
                 },
                 checkpoint_folder / "model_best.pth",
