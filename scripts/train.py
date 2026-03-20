@@ -279,7 +279,7 @@ def main():
                 z2, torch.Tensor
             ), "Sanity test: z1 and z2 were existed if validation > 0"
 
-            n_obj, n_feature = z1.shape
+            n_obj = z1.shape[0]
 
             z1_embed = model.backbone(y1_filtered)  # type: ignore
             z2_embed = model.backbone(y2_filtered)  # type: ignore
@@ -293,7 +293,6 @@ def main():
             embed_c_feat = embed_c_feat.cpu().detach().numpy()
             embed_c_obj = torch.matmul(z1_embed_f, z2_embed_f.T) / z1.shape[1]
             embed_c_obj = embed_c_obj.cpu().detach().numpy()
-
             # plot cross correlation to visualize
 
             # Object Space Correlation (N x N)
@@ -305,11 +304,14 @@ def main():
             proj_c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
             proj_c_obj = proj_c_obj.cpu().detach().numpy()
 
+        n_feature_embed = embed_c_feat.shape[0]
+        n_feature_proj = proj_c_feat.shape[0]
+
         fig = plt.figure(figsize=(16, 14), layout="constrained", frameon=False)
         plot_matrices(
             embed_c_feat,
             fig.add_subplot(221),
-            f"Backbone: Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
+            f"Backbone: Feature Space Correlation (Epoch {epoch})\n{n_feature_embed}x{n_feature_embed}",
         )
         plot_matrices(
             embed_c_obj,
@@ -317,11 +319,10 @@ def main():
             f"Backbone: Object Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
             show_colorbar=True,  # only show colorbar at upper right.
         )
-
         plot_matrices(
             proj_c_feat,
             fig.add_subplot(223),
-            f"Projector: Feature Space Correlation (Epoch {epoch})\n{n_feature}x{n_feature}",
+            f"Projector: Feature Space Correlation (Epoch {epoch})\n{n_feature_proj}x{n_feature_proj}",
         )
         plot_matrices(
             proj_c_obj,
