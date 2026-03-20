@@ -117,7 +117,7 @@ class BarlowTwinsDualLoss(nn.Module):
         self.alpha = alpha
         self.eps = eps
 
-    def off_diagonal(self, x):
+    def off_diagonal(self, x: torch.Tensor) -> torch.Tensor:
         n, m = x.shape
         assert n == m
         return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
@@ -125,7 +125,7 @@ class BarlowTwinsDualLoss(nn.Module):
     def loss_from_matrix(self, c: torch.Tensor, lambd: float) -> torch.Tensor:
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = self.off_diagonal(c).pow_(2).sum()
-        return (on_diag + lambd * off_diag) / c.shape[0]
+        return (on_diag + lambd * off_diag) / c.numel()
 
     def forward(self, z1: torch.Tensor, z2: torch.Tensor):
         # Feature Space Correlation (D x D)
@@ -136,16 +136,16 @@ class BarlowTwinsDualLoss(nn.Module):
         c_feat = torch.matmul(z1_f.T, z2_f) / z1.shape[0]
 
         # Object Space Correlation (N x N)
-        # NOTE cosine similarity or normalized with centered were not stable
-        # z1_o = F.normalize(z1, p=2, dim=1)
-        # z2_o = F.normalize(z2, p=2, dim=1)
-        # # Using cosine similarity to maximize the different to the object space
-        # c_obj = torch.matmul(z1_o, z2_o.T)
+        # cosine similarity or normalized with centered were not stable
+        z1_o = F.normalize(z1_f, p=2, dim=1)
+        z2_o = F.normalize(z2_f, p=2, dim=1)
+        # Using cosine similarity to maximize the different to the object space
+        c_obj = torch.matmul(z1_o, z2_o.T)
         # z1_0 = z1 - z1.mean(1, keepdim=True)
         # z2_0 = z2 - z2.mean(1, keepdim=True)
         # z1_o = F.normalize(z1_0, p=2, dim=1)
         # z2_o = F.normalize(z2_0, p=2, dim=1)
-        c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
+        # c_obj = torch.matmul(z1_f, z2_f.T) / z1.shape[1]
 
         l_feat = self.loss_from_matrix(c_feat, self.lambd_feat)
         l_obj = self.loss_from_matrix(c_obj, self.lambd_obj)

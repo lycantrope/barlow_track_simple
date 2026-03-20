@@ -1,5 +1,4 @@
 import argparse
-from collections import OrderedDict
 from pathlib import Path
 from typing import Union
 
@@ -51,6 +50,7 @@ def run_epoch(
     model: Union[BarlowTwinsEmbed3D, torch.nn.DataParallel],
     loss_fn: BarlowTwinsDualLoss,
     optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.OneCycleLR,
 ):
     model.train()
     epoch_loss = 0.0
@@ -110,10 +110,13 @@ def run_epoch(
 
         valid_batch_count += valid_loss_count
         # Backward pass
-        if valid_loss_count > 0:
+        if valid_loss_count == 0:
+            print("No batch detect please check your dataset")
+        else:
             (total_loss / valid_loss_count).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+            scheduler.step()
 
         pbar.set_postfix({"loss": f"{total_loss.item():.4f} "})
 
@@ -205,6 +208,15 @@ def main():
         batch_size=cfg.get("batch_size", 64),
     )
 
+    schedular = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer=optimizer,
+        max_lr=0.0008,
+        total_steps=len(loaders)
+        * cfg["epochs"],  # Use the dynamic total instead of a hardcoded number
+        pct_start=0.3,  # Spend 30% of the 50 epochs ramping up
+        div_factor=10,
+        final_div_factor=100,
+    )
     checkpoint_folder = cfg_path.parent / "checkpoints"
     checkpoint_folder.mkdir(exist_ok=True)
     train_losses = []
@@ -216,7 +228,9 @@ def main():
         print(f"Resume from epoch: {start_epoch}| best_val_loss: {best_val_loss:.4f}")
 
     for epoch in range(start_epoch, start_epoch + cfg["epochs"]):
-        avg_val_loss = run_epoch(epoch, loaders["train"], model, loss_fn, optimizer)
+        avg_val_loss = run_epoch(
+            epoch, loaders["train"], model, loss_fn, optimizer, schedular
+        )
 
         # 3. Save Intermediate Checkpoint
         torch.save(
