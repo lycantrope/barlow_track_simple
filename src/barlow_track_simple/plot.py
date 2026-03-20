@@ -47,7 +47,7 @@ def plot_matrices(
 
     pcm = ax.imshow(matrices, cmap="magma", vmin=-0.1, vmax=1.0)
     if show_colorbar:
-        cax = ax.inset_axes((1.04, 0.2, 0.05, 0.8))
+        cax = ax.inset_axes((1.04, 0.05, 0.05, 0.9))
         fig = ax.get_figure(root=True)
         assert fig is not None, "Cannot retrieve root figure"
         fig.colorbar(pcm, cax=cax)
