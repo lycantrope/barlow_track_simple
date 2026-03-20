@@ -279,9 +279,9 @@ def main():
                 valid_l_feat += l_feat.item()
                 valid_l_obj += l_obj.item()
 
-            assert isinstance(z1, torch.Tensor) and isinstance(z2, torch.Tensor), (
-                "Sanity test: z1 and z2 were existed if validation > 0"
-            )
+            assert isinstance(z1, torch.Tensor) and isinstance(
+                z2, torch.Tensor
+            ), "Sanity test: z1 and z2 were existed if validation > 0"
 
             n_obj = z1.shape[0]
 
@@ -311,28 +311,29 @@ def main():
         n_feature_embed = embed_c_feat.shape[0]
         n_feature_proj = proj_c_feat.shape[0]
 
-        fig = plt.figure(figsize=(16, 14), layout="constrained", frameon=False)
+        fig = plt.figure(figsize=(8, 7), layout="constrained", frameon=False, dpi=600)
         plot_matrices(
             embed_c_feat,
             fig.add_subplot(221),
-            f"Backbone: Feature Space Correlation (Epoch {epoch})\n{n_feature_embed}x{n_feature_embed}",
+            f"Backbone: Feature Space ({n_feature_embed}x{n_feature_embed})",
         )
         plot_matrices(
             embed_c_obj,
             fig.add_subplot(222),
-            f"Backbone: Object Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
+            f"Backbone: Object Space ({n_obj}x{n_obj})",
             show_colorbar=True,  # only show colorbar at upper right.
         )
         plot_matrices(
             proj_c_feat,
             fig.add_subplot(223),
-            f"Projector: Feature Space Correlation (Epoch {epoch})\n{n_feature_proj}x{n_feature_proj}",
+            f"Projector: Feature Space ({n_feature_proj}x{n_feature_proj})",
         )
         plot_matrices(
             proj_c_obj,
             fig.add_subplot(224),
-            f"Projector: Object Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
+            f"Projector: Object Space ({n_obj}x{n_obj})",
         )
+        fig.suptitle(f"Correlation Matrices (Epoch {epoch})")
         fig.savefig(checkpoint_folder / f"barlow_val_epoch_{epoch:0>3d}_valid.png")
 
         valid_l_all = valid_l_all / len(loaders["valid"])
