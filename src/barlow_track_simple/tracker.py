@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,7 +59,7 @@ class EmbedDataset:
         )
 
     @classmethod
-    def from_parquet(cls, parquet_file: Path) -> "BarlowEmbedDataset":
+    def from_parquet(cls, parquet_file: Path) -> EmbedDataset:
         return cls(pl.scan_parquet(source=parquet_file))
 
 

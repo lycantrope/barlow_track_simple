@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import abc
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import h5py
 import hdf5plugin
@@ -17,24 +19,11 @@ from barlow_track_simple.augmentation import Transform
 os.environ["HDF5_PLUGIN_PATH"] = hdf5plugin.PLUGINS_PATH
 
 
-def estimate_range(N, data, p_min: float = 5.0, p_max: float = 100.0):
-    # Estimate the pixel value range
-    frame_idx = np.arange(N)
-    #  10% of frame will be selected (max: 8 , min: 1)
-    n_selected = max(min(frame_idx.size // 10, 8), 1)
-    selected_idx = np.random.choice(frame_idx, n_selected, replace=False)
-    # Calculate the percentile values
-    p_low, p_high = np.percentile(
-        [data[i] for i in selected_idx],
-        [p_min, p_max],
-    )
-    ptp = p_high - p_low + 1e-8
-    return p_low, p_high, ptp
-
-
 class Stack(abc.ABC):
+
     @abc.abstractmethod
     def get_filepath(self) -> Path: ...
+
     @abc.abstractmethod
     def init(self) -> None: ...
 
@@ -58,6 +47,24 @@ class Stack(abc.ABC):
     @property
     @abc.abstractmethod
     def shape(self) -> Sequence[int]: ...
+
+    def estimate_range(
+        self, p_min: float = 5.0, p_max: float = 100.0
+    ) -> Tuple[float, float, float]:
+        # Estimate the pixel value range
+        assert self.data is not None, "Stack.init must be evoked before estimate_range"
+        N = self.shape[0]
+        frame_idx = np.arange(N)
+        #  10% of frame will be selected (max: 8 , min: 1)
+        n_selected = max(min(frame_idx.size // 10, 8), 1)
+        selected_idx = np.random.choice(frame_idx, n_selected, replace=False)
+        # Calculate the percentile values
+        p_low, p_high = np.percentile(
+            [np.asarray(self.data[i]) for i in selected_idx],
+            [p_min, p_max],
+        )
+        ptp = p_high - p_low + 1e-8
+        return p_low, p_high, ptp
 
     def __len__(self) -> int:
         return self.shape[0]
@@ -385,9 +392,7 @@ class ImageDataset(torch.utils.data.Dataset):
         self.n_obj_max = np.bincount(t_indice_all).max()
         # Since Dataloader will pickle the status to other thread, however, the memmap or hdf file is not picklable
         # We _normalizerose the files just after init, then, reopen it in sub workers.
-        self.min, self.max, self.ptp = estimate_range(
-            self.imagestack.shape[0], self.imagestack.data
-        )
+        self.min, self.max, self.ptp = self.imagestack.estimate_range()
         self.imagestack.close()
 
     def normalize(self, img: np.ndarray) -> np.ndarray:

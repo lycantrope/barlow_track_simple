@@ -1,4 +1,8 @@
 # Functions from: https://github.com/wolny/pytorch-3dunet
+from __future__ import annotations
+
+from typing import Optional
+
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -213,7 +217,7 @@ class Encoder(nn.Module):
             is3d=is3d,
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.pooling is not None:
             x = self.pooling(x)
         x = self.basic_module(x)
@@ -279,7 +283,7 @@ class ResNetBlock(nn.Module):
         else:
             self.non_linearity = nn.ReLU(inplace=True)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         # apply first convolution to bring the number of channels to out_channels
         residual = self.conv1(x)
 
@@ -315,7 +319,7 @@ class ChannelSELayer3D(nn.Module):
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, D, H, W = x.size()
         # Average along each channel
         squeeze_tensor = self.avg_pool(x)
@@ -344,7 +348,11 @@ class SpatialSELayer3D(nn.Module):
         self.conv = nn.Conv3d(num_channels, 1, 1)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x, weights=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         """
         Args:
             weights (torch.Tensor): weights for few shot learning
@@ -386,7 +394,7 @@ class ChannelSpatialSELayer3D(nn.Module):
         self.cSE = ChannelSELayer3D(num_channels, reduction_ratio)
         self.sSE = SpatialSELayer3D(num_channels)
 
-    def forward(self, input_tensor):
+    def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
         output_tensor = torch.max(self.cSE(input_tensor), self.sSE(input_tensor))
         return output_tensor
 
@@ -416,7 +424,7 @@ class ResNetBlockSE(ResNetBlock):
                 num_channels=out_channels, reduction_ratio=1
             )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = super().forward(x)
         out = self.se_module(out)
         return out

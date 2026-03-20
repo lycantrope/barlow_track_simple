@@ -1,4 +1,6 @@
-from typing import Tuple
+from __future__ import annotations
+
+from typing import Optional, Tuple
 
 import numpy.typing as npt
 import torchio.transforms as tio
@@ -7,17 +9,17 @@ import torchio.transforms as tio
 class Transform:
     def __init__(
         self,
-        p_RandomAffine_base=1.0,
-        p_RandomBlur_base=0.1,
-        p_RandomBlur=0.0,
-        p_RandomAffine=0.1,
-        p_RandomAffine_flip=0.1,
-        zxy_RandomElasticDeformation=(1, 3, 3),
-        p_RandomElasticDeformation=0.0,
-        std_RandomNoise=0.25,
-        p_RandomNoise=0.1,
-        p_RandomAffine_both=None,
-        **kwargs,  # Catch unknown args
+        p_RandomAffine_base: float = 1.0,
+        p_RandomBlur_base: float = 0.1,
+        p_RandomBlur: float = 0.0,
+        p_RandomAffine: float = 0.1,
+        p_RandomAffine_flip: float = 0.1,
+        zxy_RandomElasticDeformation: Tuple[int, int, int] = (1, 3, 3),
+        p_RandomElasticDeformation: float = 0.0,
+        std_RandomNoise: float = 0.25,
+        p_RandomNoise: float = 0.1,
+        p_RandomAffine_both: Optional[float] = None,
+        **_,  # Catch unknown args
     ):
 
         if isinstance(p_RandomAffine_both, float):

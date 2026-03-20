@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal, Optional, Tuple
 
 import torch
@@ -67,7 +69,7 @@ class BarlowTwinsEmbed3D(nn.Module):
         # self.bn = nn.BatchNorm1d(sizes[-1], affine=False)
         # self.bn = nn.Identity()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor):
         return self.projector(self.backbone(x))
 
     @classmethod
@@ -77,7 +79,7 @@ class BarlowTwinsEmbed3D(nn.Module):
         crop_sz: Tuple[int, int, int],
         backbone_type: Literal["ResidualEncoder3D", "Siamese"],
         projector_final: Optional[int] = None,
-    ) -> "BarlowTwinsEmbed3D":
+    ) -> BarlowTwinsEmbed3D:
         """
         Loads a model directly from the weights file, and assumes the args are saved in the same folder as args.pickle
 

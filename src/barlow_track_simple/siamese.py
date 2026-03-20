@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -44,7 +46,7 @@ class Siamese(Encoder):
                     m.weight, mode="fan_out", nonlinearity="leaky_relu"
                 )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
         x = x.view(x.size()[0], -1)
         x = self.projection(x)
