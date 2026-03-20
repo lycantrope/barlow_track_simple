@@ -315,6 +315,7 @@ def main():
             embed_c_obj,
             fig.add_subplot(222),
             f"Backbone: Object Space Correlation (Epoch {epoch})\n{n_obj}x{n_obj}",
+            show_colorbar=True,  # only show colorbar at upper right.
         )
 
         plot_matrices(
