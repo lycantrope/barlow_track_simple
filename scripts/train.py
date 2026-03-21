@@ -211,7 +211,7 @@ def main():
     total_steps = len(loaders["train"]) * cfg["epochs"]
     schedular = torch.optim.lr_scheduler.OneCycleLR(
         optimizer=optimizer,
-        max_lr=0.0008,
+        max_lr=cfg["lr"] * 4.0,
         total_steps=total_steps,
         pct_start=0.3,  # Spend 30% of the 50 epochs ramping up
         div_factor=10,
