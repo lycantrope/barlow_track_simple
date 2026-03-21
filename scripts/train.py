@@ -243,7 +243,7 @@ def main():
                 "optimizer": optimizer.state_dict(),
                 "schedular": schedular.state_dict(),
             },
-            checkpoint_folder / "model_last.pth",
+            checkpoint_folder / f"model_epoch{epoch:0>3d}.pth",
         )
         train_losses.append(avg_val_loss)
 
